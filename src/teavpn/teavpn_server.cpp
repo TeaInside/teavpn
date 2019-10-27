@@ -28,20 +28,24 @@
 #include <teavpn/teavpn_server.h>
 #include <teavpn/teavpn_config_parser.h>
 
+#define BUFSIZE 2000
+
 extern uint8_t verbose_level;
 static uint8_t thread_amount;
 static int *master_tap_fd;
 static int *master_sock_fd;
 static int *master_net_fd;
 static bool *master_thread_busy;
+
 static void *teavpn_thread_worker(void *arg);
+static void teavpn_worker(int net_fd, int tap_fd);
 static void teaserver_init_iface(server_config *dev);
 static bool teavpn_server_socket_setup(int sock_fd);
 
 uint8_t teavpn_server(server_config *config)
 {
 	// client_state *in;
-	int tap_fd, sock_fd;
+	int tap_fd, sock_fd, net_fd;
 	socklen_t remote_len;
 	uint8_t thread_pos = 0;
 	struct sockaddr_in local;
@@ -72,9 +76,6 @@ uint8_t teavpn_server(server_config *config)
 	}
 
 	thread_amount = config->threads;
-
-	int net_fd[thread_amount];
-	master_net_fd = net_fd;
 
 	// Declare pthread_t
 	pthread_t teavpn_threads[thread_amount];
@@ -132,12 +133,12 @@ uint8_t teavpn_server(server_config *config)
 
 	debug_log(0, "Listening on %s:%d...\n", config->bind_addr, config->bind_port);
 
-	// Initialize threads
-	for (uint8_t i = 0; i < config->threads; i++) {
-		uint8_t *m = (uint8_t *)malloc(sizeof(uint8_t));
-		*m = i;
-		pthread_create(&(teavpn_threads[i]), NULL, teavpn_thread_worker, (void *)m);
-	}
+	// // Initialize threads
+	// for (uint8_t i = 0; i < config->threads; i++) {
+	// 	uint8_t *m = (uint8_t *)malloc(sizeof(uint8_t));
+	// 	*m = i;
+	// 	pthread_create(&(teavpn_threads[i]), NULL, teavpn_thread_worker, (void *)m);
+	// }
 
 	// Accept connection.
 	remote_len = sizeof(struct sockaddr_in);
@@ -146,29 +147,23 @@ uint8_t teavpn_server(server_config *config)
 
 		struct sockaddr_in addr;
 
-		net_fd[thread_pos] = accept(sock_fd, (struct sockaddr *)&addr, &remote_len);
+		net_fd = accept(sock_fd, (struct sockaddr *)&addr, &remote_len);
 		thread_busy[thread_pos] = true;
 		thread_pos++;
 
-		if (thread_pos == thread_amount) {
-			while (1) sleep(1000000);
+		if (!fork()) {
+			teavpn_worker(net_fd, tap_fd);
+			exit(0);
 		}
 
-		// in = (client_state *)malloc(sizeof(client_state));
-		// in->fd = accept(sock_fd, (struct sockaddr *)&(in->addr), &remote_len);
-		// if ((in->fd) > 0) {
-		// 	close(in->fd);
-		// } else {
-		// 	perror("Error on accept");
+		// if (thread_pos == thread_amount) {
+		// 	while (1) sleep(1000000);
 		// }
-		// in = NULL;
 	}
 }
 
-#define BUFSIZE 2000
-
-static ssize_t cread(int fd, char *buf, int n) {
-
+static ssize_t cread(int fd, char *buf, int n)
+{
 	ssize_t nread;
 
 	if ((nread = read(fd, buf, n)) < 0) {
@@ -177,8 +172,8 @@ static ssize_t cread(int fd, char *buf, int n) {
 	return nread;
 }
 
-static ssize_t cwrite(int fd, char *buf, int n) {
-
+static ssize_t cwrite(int fd, char *buf, int n)
+{
 	ssize_t nwrite;
 
 	if ((nwrite = write(fd, buf, n)) < 0){
@@ -187,8 +182,8 @@ static ssize_t cwrite(int fd, char *buf, int n) {
 	return nwrite;
 }
 
-static ssize_t read_n(int fd, char *buf, int n) {
-
+static ssize_t read_n(int fd, char *buf, int n)
+{
 	ssize_t nread, left = n;
 
 	while (left > 0) {
@@ -203,31 +198,19 @@ static ssize_t read_n(int fd, char *buf, int n) {
 }
 
 /**
- * @param void *arg
- * @return void*
+ * @param int net_fd
+ * @param int tap_fd
+ * @return void
  */
-static void *teavpn_thread_worker(void *arg)
+static void teavpn_worker(int net_fd, int tap_fd)
 {
+	fd_set rd_set;
 	char buffer[BUFSIZE];
-	uint8_t tn = *((uint8_t *)arg);
-	unsigned long int tap2net = 0, net2tap = 0;
 	ssize_t nread, nwrite, plength;
-
-	free(arg);
-
-	#define tap_fd (*(master_tap_fd))
-	#define net_fd (master_net_fd[tn])
-	#define sock_fd (*(master_sock_fd))
-
-	int maxfd = (tap_fd > net_fd) ? tap_fd : net_fd;
-
-	while (!master_thread_busy[tn]) {
-		sleep(1);
-	}
+	uint64_t tap2net = 0, net2tap = 0;
+	int ret, maxfd = (tap_fd > net_fd) ? tap_fd : net_fd;
 
 	while (1) {
-		int ret;
-		fd_set rd_set;
 
 		FD_ZERO(&rd_set);
 		FD_SET(tap_fd, &rd_set);
@@ -283,12 +266,14 @@ static void *teavpn_thread_worker(void *arg)
 			debug_log(3, "NET2TAP %lu: Written %d bytes to the tap interface\n", net2tap, nwrite);
 		}
 	}
+}
 
-	#undef tap_fd
-	#undef net_fd
-	#undef sock_fd
-
-	return NULL;
+/**
+ * @param void *arg
+ * @return void*
+ */
+static void *teavpn_thread_worker(void *arg)
+{	
 }
 
 #undef BUFSIZE
