@@ -1,0 +1,14 @@
+
+# Server
+sudo /sbin/ip link set dev tunx up mtu 1500
+sudo /sbin/ip addr add dev tunx 5.5.0.1/16 broadcast 5.5.255.255
+
+
+# Client
+sudo /sbin/ip link set dev teavpn2 up mtu 1500
+sudo /sbin/ip addr add dev teavpn2 5.5.0.2/16 broadcast 5.5.255.255
+
+sudo /sbin/ip route add 6.6.0.1/32 via 192.168.50.1
+sudo /sbin/ip route add 0.0.0.0/1 via 5.5.0.1
+sudo /sbin/ip route add 128.0.0.0/1 via 5.5.0.1
+
