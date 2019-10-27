@@ -30,6 +30,8 @@
 
 #define BUFSIZE 2000
 
+extern uint8_t verbose_level;
+
 static ssize_t cread(int fd, char *buf, int n) {
 
 	ssize_t nread;
@@ -71,6 +73,8 @@ uint8_t teavpn_client(client_config *config)
 	uint64_t tap2net = 0, net2tap = 0;
 	ssize_t nread, nwrite, plength;
 
+	verbose_level = config->verbose_level;
+
 	memset(&remote, 0, sizeof(remote));
 	remote.sin_family = AF_INET;
 	remote.sin_addr.s_addr = inet_addr(config->server_ip);
@@ -98,10 +102,12 @@ uint8_t teavpn_client(client_config *config)
 	debug_log(2, "OK\n");
 
 	// Connect to server.
+	debug_log(1, "Connecting to %s:%d...\n", config->server_ip, config->server_port);
 	if (connect(sock_fd, (struct sockaddr*)&remote, sizeof(remote)) < 0){
 		perror("connect()");
-		exit(1);
+		return 1;
 	}
+	debug_log(1, "Connection established\n");
 
 	net_fd = sock_fd;
 	debug_log(2, "CLIENT: Connected to server %s\n", inet_ntoa(remote.sin_addr));

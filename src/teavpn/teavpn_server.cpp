@@ -172,6 +172,7 @@ static ssize_t cread(int fd, char *buf, int n) {
 	ssize_t nread;
 
 	if ((nread = read(fd, buf, n)) < 0) {
+		perror("read");
 	}
 	return nread;
 }
@@ -181,6 +182,7 @@ static ssize_t cwrite(int fd, char *buf, int n) {
 	ssize_t nwrite;
 
 	if ((nwrite = write(fd, buf, n)) < 0){
+		perror("write");
 	}
 	return nwrite;
 }
