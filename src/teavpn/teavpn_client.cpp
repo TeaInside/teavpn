@@ -32,28 +32,23 @@
 
 extern uint8_t verbose_level;
 
+static bool teaclient_init_iface(int net_fd, client_config *config);
+
 static ssize_t cread(int fd, char *buf, int n) {
-
 	ssize_t nread;
-
 	if ((nread = read(fd, buf, n)) < 0) {
 	}
 	return nread;
 }
-
 static ssize_t cwrite(int fd, char *buf, int n) {
-
 	ssize_t nwrite;
 
 	if ((nwrite = write(fd, buf, n)) < 0){
 	}
 	return nwrite;
 }
-
 static ssize_t read_n(int fd, char *buf, int n) {
-
 	ssize_t nread, left = n;
-
 	while (left > 0) {
 		if ((nread = cread(fd, buf, left)) == 0) {
 			return 0;
@@ -65,11 +60,15 @@ static ssize_t read_n(int fd, char *buf, int n) {
 	return n;  
 }
 
+/**
+ * @param client_config *config
+ * @return uint8_t
+ */
 uint8_t teavpn_client(client_config *config)
 {
 	char buffer[BUFSIZE];
 	struct sockaddr_in remote;
-	int net_fd, sock_fd, tap_fd, maxfd;
+	int net_fd, tap_fd, maxfd;
 	uint64_t tap2net = 0, net2tap = 0;
 	ssize_t nread, nwrite, plength;
 
@@ -91,7 +90,7 @@ uint8_t teavpn_client(client_config *config)
 
 	// Create socket.
 	debug_log(2, "Initializing socket...");
-	if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	if ((net_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
 		perror("socket()");
 		return 1;
 	}
@@ -103,13 +102,14 @@ uint8_t teavpn_client(client_config *config)
 
 	// Connect to server.
 	debug_log(1, "Connecting to %s:%d...\n", config->server_ip, config->server_port);
-	if (connect(sock_fd, (struct sockaddr*)&remote, sizeof(remote)) < 0){
+	if (connect(net_fd, (struct sockaddr*)&remote, sizeof(remote)) < 0){
 		perror("connect()");
 		return 1;
 	}
 	debug_log(1, "Connection established\n");
 
-	net_fd = sock_fd;
+	teaclient_init_iface(net_fd, config);
+
 	debug_log(2, "CLIENT: Connected to server %s\n", inet_ntoa(remote.sin_addr));
 
 	maxfd = (tap_fd > net_fd) ? tap_fd : net_fd;
@@ -174,4 +174,14 @@ uint8_t teavpn_client(client_config *config)
 	}
 
 	return 0;
+}
+
+/**
+ * @param client_config *config
+ * @return uint8_t
+ */
+static bool teaclient_init_iface(int net_fd, client_config *config)
+{
+	
+	return true;
 }

@@ -18,6 +18,7 @@ typedef struct _server_config {
 	// Interface information
 	char *dev;
 	char *inet4;
+	char *inet4_bcmask;
 	uint16_t mtu;
 	// End interface information
 
@@ -56,6 +57,13 @@ typedef struct _teavpn_config {
 	union _config config;
 	enum _config_type type;
 } teavpn_config;
+
+typedef struct _interface_setting {
+	size_t inet4_len;
+	size_t inet4_bcmask_len;
+	char *inet4;
+	char *inet4_bcmask;
+} interface_setting;
 
 int tun_alloc(char *dev, int flags);
 void debug_log(uint8_t vlevel, const char *msg, ...);

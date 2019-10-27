@@ -101,7 +101,7 @@ uint8_t teavpn_server(server_config *config)
 
 	// Create socket.
 	debug_log(2, "Initializing socket...");
-	if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	if ((sock_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
 		perror("socket()");
 		return 1;
 	}
@@ -220,7 +220,6 @@ static void teavpn_worker(int net_fd, int tap_fd)
 		FD_ZERO(&rd_set);
 		FD_SET(tap_fd, &rd_set);
 		FD_SET(net_fd, &rd_set);
-
 		ret = select(maxfd + 1, &rd_set, NULL, NULL, NULL);
 
 		if (ret < 0 && errno == EINTR){
@@ -233,14 +232,13 @@ static void teavpn_worker(int net_fd, int tap_fd)
 		}
 
 		if (FD_ISSET(tap_fd, &rd_set)){
-			// data from tun/tap: just read it and write it to the network
-
+			// Data from TUN/TAP: just read it and write it to the network
 			nread = cread(tap_fd, buffer, BUFSIZE);
 
 			tap2net++;
 			debug_log(3, "TAP2NET %lu: Read %d bytes from the tap interface\n", tap2net, nread);
 
-			/* write length + packet */
+			// Write length + packet.
 			plength = htons(nread);
 			nwrite = cwrite(net_fd, (char *)&plength, sizeof(plength));
 			nwrite = cwrite(net_fd, buffer, nread);
@@ -249,8 +247,8 @@ static void teavpn_worker(int net_fd, int tap_fd)
 		}
 
 		if (FD_ISSET(net_fd, &rd_set)) {
-			/* data from the network: read it, and write it to the tun/tap interface. 
-			* We need to read the length first, and then the packet */
+			// Data from the network: read it, and write it to the tun/tap interface.
+			// We need to read the length first, and then the packet.
 
 			// Read length
 			nread = read_n(net_fd, (char *)&plength, sizeof(plength));

@@ -42,6 +42,7 @@ static const struct option client_options[] = {
 static char bind_any_addr[] = "0.0.0.0";
 static char default_dev_name[] = "teavpn";
 static char default_inet4[] = "5.5.0.1/16";
+static char default_inet4_bcmask[] = "5.5.255.255";
 
 static void show_help_client(char *appname);
 static void show_help_server(char *appname);
@@ -101,6 +102,7 @@ static bool server_argv_parser(char *appname, server_config *server, int argc, c
 	server->config_file = NULL;
 	server->mtu = 1500;
 	server->inet4 = default_inet4;
+	server->inet4_bcmask = default_inet4_bcmask;
 	server->dev = default_dev_name;
 
 	while (true) {
