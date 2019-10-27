@@ -11,12 +11,16 @@
 #include <teavpn/teavpn_server.h>
 #include <teavpn/teavpn_client.h>
 
-int main(int argc, char **argv, char **envp)
+char **argv;
+
+int main(int argc, char **_argv, char **envp)
 {
 	uint8_t exit_code;
 	teavpn_config config;
 
-	if (!argv_parser(&config, argc, argv, envp)) {
+	argv = _argv;
+
+	if (!argv_parser(&config, argc, _argv, envp)) {
 		exit_code = 1;
 		goto ret;
 	}

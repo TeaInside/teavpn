@@ -30,7 +30,9 @@
 
 #define BUFSIZE 2000
 
+extern char **argv;
 extern uint8_t verbose_level;
+
 static uint8_t thread_amount;
 static int *master_tap_fd;
 static int *master_sock_fd;
@@ -152,6 +154,9 @@ uint8_t teavpn_server(server_config *config)
 		thread_pos++;
 
 		if (!fork()) {
+			char buf[100];
+			strcpy(buf, argv[0]);
+			sprintf(argv[0], "%s:serving %s:%d", buf, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 			teavpn_worker(net_fd, tap_fd);
 			exit(0);
 		}
