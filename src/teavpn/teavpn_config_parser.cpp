@@ -207,7 +207,7 @@ bool teavpn_client_config_parser(char *internal_buf, client_config *config)
 			internal_buf += strlen(internal_buf) + 1;
 		} else if (!strcmp(&(buffer[j]), "mtu")) {
 			config->mtu = (uint16_t)atoi(&(buffer[k]));
-		}else if (!strcmp(&(buffer[j]), "server_ip")) {
+		} else if (!strcmp(&(buffer[j]), "server_ip")) {
 			strcpy(internal_buf, &(buffer[k]));
 			config->server_ip = internal_buf;
 			internal_buf += strlen(internal_buf) + 1;
@@ -216,11 +216,13 @@ bool teavpn_client_config_parser(char *internal_buf, client_config *config)
 		} else if (!strcmp(&(buffer[j]), "username")) {
 			strcpy(internal_buf, &(buffer[k]));
 			config->username = internal_buf;
-			internal_buf += strlen(internal_buf) + 1;
+			config->username_len = strlen(internal_buf);
+			internal_buf +=  config->username_len + 1;
 		} else if (!strcmp(&(buffer[j]), "password")) {
 			strcpy(internal_buf, &(buffer[k]));
 			config->password = internal_buf;
-			internal_buf += strlen(internal_buf) + 1;
+			config->password_len = strlen(internal_buf);
+			internal_buf += config->password_len;
 		}
 
 		line++;
