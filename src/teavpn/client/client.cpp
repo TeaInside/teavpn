@@ -46,6 +46,7 @@ struct sockaddr_in *server_addr;
 uint8_t teavpn_client(client_config *config)
 {
 	fd_set rd_set;
+	struct iphdr *ipdr;
 	int fd_ret, max_fd;
 	teavpn_packet *packet;
 	ssize_t nread, nwrite;
@@ -130,6 +131,23 @@ uint8_t teavpn_client(client_config *config)
 				perror("read tap_fd");
 				goto a11;
 			}
+
+			ipdr = (struct iphdr *)(connection_buffer + 4);
+
+			printf("saddr: \"%d.%d.%d.%d\"\n",
+				(ipdr->saddr) & 0xff,
+				(ipdr->saddr >> 8) & 0xff,
+				(ipdr->saddr >> 16) & 0xff,
+				(ipdr->saddr >> 24) & 0xff
+			);
+			printf("daddr: \"%d.%d.%d.%d\"\n",
+				(ipdr->daddr) & 0xff,
+				(ipdr->daddr >> 8) & 0xff,
+				(ipdr->daddr >> 16) & 0xff,
+				(ipdr->daddr >> 24) & 0xff
+			);
+			fflush(stdout);
+
 			packet->seq = 0;
 			packet->type = teavpn_packet_data;
 			packet->tot_len = DATA_PACKET_OFFSET + nread;
@@ -146,6 +164,9 @@ uint8_t teavpn_client(client_config *config)
 				perror("sendto net_fd");
 				goto a11;
 			}
+
+			printf("sent %ld bytes\n", nwrite);
+			fflush(stdout);
 		}
 
 		a11:
@@ -162,6 +183,9 @@ uint8_t teavpn_client(client_config *config)
 				perror("recvfrom net_fd");
 				goto a12;
 			}
+
+			printf("got %ld bytes\n", nread);
+			fflush(stdout);
 
 			nwrite = write(tap_fd, connection_buffer, packet->tot_len - DATA_PACKET_OFFSET);
 			if (nwrite < 0) {

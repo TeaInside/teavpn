@@ -58,6 +58,7 @@ static bool teavpn_client_auth(struct buffer_channel *bufchan, struct sockaddr_i
 uint8_t teavpn_server(server_config *config)
 {
 	fd_set rd_set;
+	ssize_t nwrite;
 	int fd_ret, max_fd;
 	int16_t bufchan_index;
 	teavpn_packet *packet;
@@ -164,6 +165,9 @@ uint8_t teavpn_server(server_config *config)
 			bufchan[bufchan_index].length = read(tap_fd, bufchan[bufchan_index].buffer, UDP_BUFFER);
 			bufchan[bufchan_index].ref_count = entry_count;
 
+			printf("1 from tap_fd: %ld bytes\n", bufchan[bufchan_index].length);
+			fflush(stdout);
+
 			for (uint16_t i = 0; i < entry_count; i++) {
 				if (entries[i].connected) {
 					thpool_add_work(
@@ -191,6 +195,9 @@ uint8_t teavpn_server(server_config *config)
 				&remote_len
 			);
 
+			printf("read from net_fd: %ld bytes\n", bufchan[bufchan_index].length);
+			fflush(stdout);
+
 			if (bufchan[bufchan_index].length < 0) {
 				perror("recvfrom");
 				goto gcd;
@@ -202,17 +209,29 @@ uint8_t teavpn_server(server_config *config)
 				bufchan[bufchan_index].ref_count = 1;
 				teavpn_client_auth(&(bufchan[bufchan_index]), &client_addr);
 			} else if (packet->type == teavpn_packet_data) {
-				bufchan[bufchan_index].ref_count = entry_count;
-				write(tap_fd, bufchan[bufchan_index].buffer, bufchan[bufchan_index].length);
-				for (uint16_t i = 0; i < entry_count; i++) {
-					if (entries[i].connected) {
-						thpool_add_work(
-							threads_pool,
-							(void * (*)(void *))thread_worker,
-							(void *)((uint64_t)(i | (bufchan_index << 16)))
-						);	
-					}
+
+				nwrite = write(
+					tap_fd,
+					bufchan->bufptr + DATA_PACKET_OFFSET,
+					packet->tot_len - DATA_PACKET_OFFSET
+				);
+				if (nwrite < 0) {
+					perror("write tap_fd");
 				}
+				printf("written to tap_fd: %ld bytes\n", nwrite);
+				fflush(stdout);
+
+				bufchan[bufchan_index].ref_count = 0;
+				// for (uint16_t i = 0; i < entry_count; i++) {
+				// 	if (entries[i].connected) {
+				// 		bufchan[bufchan_index].ref_count++;
+				// 		thpool_add_work(
+				// 			threads_pool,
+				// 			(void * (*)(void *))thread_worker,
+				// 			(void *)((uint64_t)(i | (bufchan_index << 16)))
+				// 		);	
+				// 	}
+				// }
 				net2tap++;
 			}
 		}
@@ -249,11 +268,20 @@ static void *thread_worker(uint64_t entry)
 	uint16_t
 		bufchan_index = entry & 0xffff,
 		conn_index = (entry >> 16) & 0xffff;
+
 	ssize_t nbytes;
 	char _connection_buffer[UDP_BUFFER + sizeof(teavpn_packet) + 24], *connection_buffer;
 	teavpn_packet *packet = (teavpn_packet *)_connection_buffer;
-	connection_buffer = &(_connection_buffer[DATA_PACKET_OFFSET]);
 
+	if ((*((uint32_t *)(&(entries[conn_index].info.sin_addr)))) == 0) {
+		entries[conn_index].connected = false;
+		printf("Client disconnected!\n");
+		printf("conn_index: %d\n", conn_index);
+		fflush(stdout);
+		goto ret;
+	}
+
+	connection_buffer = &(_connection_buffer[DATA_PACKET_OFFSET]);
 	packet->seq = 0;
 	packet->type = teavpn_packet_data;
 	packet->tot_len = DATA_PACKET_OFFSET + bufchan[bufchan_index].length;
@@ -280,6 +308,7 @@ static void *thread_worker(uint64_t entry)
 		perror("sendto");
 	}
 
+	ret:
 	bufchan[bufchan_index].ref_count--;
 	return NULL;
 }
