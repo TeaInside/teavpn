@@ -7,7 +7,7 @@ In this lab, students need to implement a simple VPN for Linux.
 - Task 3: Create a Gateway-to-Gateway Tunnel.
 - Task 4: Create a Virtual Private Network (VPN).
 - Task 5: Authentication and Key Exchange.
-- Task 6: Supporting Multiple VPN Tunnels
+- Task 6: Supporting Multiple VPN Tunnels.
 
 **Submission and Demonstration**
 
