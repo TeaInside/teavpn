@@ -2,12 +2,12 @@
 
 In this lab, students need to implement a simple VPN for Linux.
 
-Task 1: Create a Host-to-Host Tunnel using TUN/TAP.
-Task 2: Create a Host-to-Gateway Tunnel.
-Task 3: Create a Gateway-to-Gateway Tunnel.
-Task 4: Create a Virtual Private Network (VPN).
-Task 5: Authentication and Key Exchange.
-Task 6: Supporting Multiple VPN Tunnels
+- Task 1: Create a Host-to-Host Tunnel using TUN/TAP.
+- Task 2: Create a Host-to-Gateway Tunnel.
+- Task 3: Create a Gateway-to-Gateway Tunnel.
+- Task 4: Create a Virtual Private Network (VPN).
+- Task 5: Authentication and Key Exchange.
+- Task 6: Supporting Multiple VPN Tunnels
 
 **Submission and Demonstration**
 
