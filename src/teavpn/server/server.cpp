@@ -117,7 +117,7 @@ uint8_t teavpn_server(server_config *config)
 	debug_log(1, "Socket file descriptor set up successfully\n");
 
 	debug_log(1, "Intiailizing threads pool...\n");
-	threads_pool = thpool_init(8);
+	threads_pool = thpool_init(config->threads);
 	debug_log(1, "Threads pool have been initialized\n");
 
 	memset(&server_addr, 0, sizeof(server_addr));
