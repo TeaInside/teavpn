@@ -164,7 +164,7 @@ uint8_t teavpn_server(server_config *config)
 			bufchan[bufchan_index].length = read(tap_fd, bufchan[bufchan_index].buffer, UDP_BUFFER);
 			bufchan[bufchan_index].ref_count = entry_count;
 
-			printf("read from tap_fd: %d bytes\n", bufchan[bufchan_index].length);
+			printf("1 from tap_fd: %ld bytes\n", bufchan[bufchan_index].length);
 			fflush(stdout);
 
 			for (uint16_t i = 0; i < entry_count; i++) {
@@ -194,7 +194,7 @@ uint8_t teavpn_server(server_config *config)
 				&remote_len
 			);
 
-			printf("read from net_fd: %d bytes\n", bufchan[bufchan_index].length);
+			printf("read from net_fd: %ld bytes\n", bufchan[bufchan_index].length);
 			fflush(stdout);
 
 			if (bufchan[bufchan_index].length < 0) {

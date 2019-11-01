@@ -97,7 +97,7 @@ uint8_t teavpn_client(client_config *config)
 
 	debug_log(0, "Connecting to %s:%d...\n", config->server_ip, config->server_port);
 
-	if (!teavpn_client_connect_auth(config)) `{
+	if (!teavpn_client_connect_auth(config)) {
 		close(net_fd);
 		close(tap_fd);
 		printf("Connection failed!\n");
