@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 
 #include <teavpn/teavpn.h>
+#include <teavpn/teavpn_handshake.h>
 
 uint8_t teavpn_client(client_config *config);
 
