@@ -13,6 +13,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+
 #define TEAVPN_ACK 0x1111
 #define TEAVPN_SYN 0x2222
 #define TEAVPN_NAK 0x3333
@@ -33,7 +36,7 @@ static bool _teavpn_send_handshake(int fd, const uint16_t data, struct sockaddr_
 		MSG_CONFIRM,
 		(struct sockaddr *)target,
 		sizeof(*target)
-	) === sizeof(data);
+	) == sizeof(data);
 }
 
 /**
@@ -85,7 +88,7 @@ static uint16_t get_handshake(int fd, struct sockaddr_in *target)
 {
 	uint16_t ret;
 	ssize_t nbytes;
-	static remote_len = sizeof(struct sockaddr_in);
+	static socklen_t remote_len = sizeof(struct sockaddr_in);
 
 	nbytes = recvfrom(
 		fd,
@@ -103,5 +106,7 @@ static uint16_t get_handshake(int fd, struct sockaddr_in *target)
 
 	return ret;
 }
+
+#pragma GCC diagnostic pop
 
 #endif
