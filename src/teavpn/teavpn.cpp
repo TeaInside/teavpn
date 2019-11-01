@@ -49,7 +49,10 @@ int tun_alloc(char *dev, int flags)
 	ifr.ifr_flags = flags;
 
 	if (*dev) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 		strncpy(ifr.ifr_name, dev, IFNAMSIZ);
+#pragma GCC diagnostic pop
 	}
 
 	if ((err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0) {

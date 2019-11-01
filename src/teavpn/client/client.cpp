@@ -47,9 +47,14 @@ uint8_t teavpn_client(client_config *config)
 {
 	fd_set rd_set;
 	int fd_ret, max_fd;
+	teavpn_packet *packet;
+	ssize_t nread, nwrite;
 	struct sockaddr_in _server_addr;
 	socklen_t remote_len = sizeof(struct sockaddr_in);
-	char connection_buffer[CONNECTION_BUFFER], config_buffer[4096];
+	char _connection_buffer[CONNECTION_BUFFER], config_buffer[4096], *connection_buffer;
+
+	packet = (teavpn_packet *)_connection_buffer;
+	connection_buffer = &(_connection_buffer[DATA_PACKET_OFFSET]);
 
 	server_addr = &_server_addr;
 
@@ -79,6 +84,7 @@ uint8_t teavpn_client(client_config *config)
 	// Create UDP socket.
 	debug_log(1, "Creating UDP socket...\n");
 	if ((net_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+		close(tap_fd);
 		perror("Socket creation failed");
 		return 1;
 	}
@@ -92,6 +98,8 @@ uint8_t teavpn_client(client_config *config)
 	debug_log(0, "Connecting to %s:%d...\n", config->server_ip, config->server_port);
 
 	if (!teavpn_client_connect_auth(config)) {
+		close(net_fd);
+		close(tap_fd);
 		printf("Connection failed!\n");
 		return 1;
 	}
@@ -115,6 +123,55 @@ uint8_t teavpn_client(client_config *config)
 			perror("select()");
 			continue;
 		}
+
+		if (FD_ISSET(tap_fd, &rd_set)) {
+			nread = read(tap_fd, connection_buffer, CONNECTION_BUFFER);
+			if (nread < 0) {
+				perror("read tap_fd");
+				goto a11;
+			}
+			packet->seq = 0;
+			packet->type = teavpn_packet_data;
+			packet->tot_len = DATA_PACKET_OFFSET + nread;
+
+			nwrite = sendto(
+				net_fd,
+				_connection_buffer,
+				packet->tot_len,
+				MSG_CONFIRM,
+				(struct sockaddr *)server_addr,
+				remote_len
+			);
+			if (nwrite < 0) {
+				perror("sendto net_fd");
+				goto a11;
+			}
+		}
+
+		a11:
+		if (FD_ISSET(net_fd, &rd_set)) {
+			nread = recvfrom(
+				net_fd,
+				_connection_buffer,
+				UDP_BUFFER,
+				MSG_WAITALL,
+				(struct sockaddr *)server_addr,
+				&remote_len
+			);
+			if (nread < 0) {
+				perror("recvfrom net_fd");
+				goto a12;
+			}
+
+			nwrite = write(tap_fd, connection_buffer, packet->tot_len - DATA_PACKET_OFFSET);
+			if (nwrite < 0) {
+				perror("write tap_fd");
+				goto a12;
+			}
+		}
+
+		a12:
+		(void)0;
 	}
 }
 
@@ -126,12 +183,13 @@ static bool teavpn_client_connect_auth(client_config *config)
 {
 	ssize_t nbytes;
 	teavpn_packet packet;
+	char _payload[4096], *lptr;
 	struct teavpn_client_auth auth;
 	static socklen_t remote_len = sizeof(struct sockaddr_in);
 
+	packet.seq = 0;
 	packet.type = teavpn_packet_auth;
 
-	auth.seq = 0;
 	auth.username = config->username;
 	auth.password = config->password;
 	auth.username_len = config->username_len;
@@ -139,19 +197,67 @@ static bool teavpn_client_connect_auth(client_config *config)
 
 	packet.data.auth = &auth;
 
+	memcpy(_payload, &packet, sizeof(packet.seq) + sizeof(packet.type));
+	packet.tot_len = sizeof(packet.seq) + sizeof(packet.type);
+	lptr = &(_payload[packet.tot_len]);
+	packet.tot_len += sizeof(packet.tot_len);
+
+	memcpy(&(_payload[packet.tot_len]), &(packet.data.auth->username_len), sizeof(uint8_t));
+	packet.tot_len += sizeof(uint8_t);
+
+	memcpy(&(_payload[packet.tot_len]), &(packet.data.auth->password_len), sizeof(uint8_t));
+	packet.tot_len += sizeof(uint8_t);
+
+	memcpy(&(_payload[packet.tot_len]), auth.username, auth.username_len + 1);
+	packet.tot_len += auth.username_len + 1;
+
+	memcpy(&(_payload[packet.tot_len]), auth.password, auth.password_len + 1);
+	packet.tot_len += auth.password_len + 1;
+
+	memcpy(lptr, &packet.tot_len, sizeof(uint16_t));
+
+	// // Debug only.
+	// printf("username_len: %d\n", auth.username_len);
+	// printf("password_len: %d\n", auth.password_len);
+	// fflush(stdout);
+	// write(1, _payload, packet.tot_len);
+
 	nbytes = sendto(
 		net_fd,
-		&(packet.type),
-		sizeof(packet.type),
+		_payload,
+		packet.tot_len,
 		MSG_CONFIRM,
 		(struct sockaddr *)server_addr,
 		remote_len
 	);
 
-	if (nbytes != sizeof(packet.type)) {
+	if (nbytes != packet.tot_len) {
 		perror("Error sendto");
 		return false;
 	}
 
-	return true;
+	memset(&packet, 0, sizeof(packet));
+
+	lptr = _payload;
+	nbytes = recvfrom(
+		net_fd,
+		lptr,
+		UDP_BUFFER,
+		MSG_WAITALL,
+		(struct sockaddr *)server_addr,
+		&remote_len	
+	);
+
+	if ((((teavpn_packet *)lptr)->type) == teavpn_packet_ack) {
+		if (!strcmp(((teavpn_packet *)lptr)->data.ack, "ok")) {
+			printf("Connected to the server!\n");
+			return true;
+		} else {
+			printf("Server rejected the connection!\n");
+		}
+	}
+
+	printf("Couldn't conenct to the server\n");
+	return false;
 }
+

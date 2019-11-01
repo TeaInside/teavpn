@@ -11,8 +11,9 @@
 #include <arpa/inet.h>
 
 #include <teavpn/teavpn.h>
+#include <teavpn/teavpn_handshake.h>
 
-#define BUFFER_CHANNEL_SIZE 6144
+#define BUFFER_CHANNEL_SIZE (UDP_BUFFER + 1)
 
 uint8_t teavpn_server(server_config *config);
 
@@ -26,7 +27,7 @@ struct connection_entry {
 struct buffer_channel {	
 	ssize_t length;
 	uint16_t ref_count;
-	void *bufptr;
+	char *bufptr;
 	char buffer[BUFFER_CHANNEL_SIZE];
 };
 

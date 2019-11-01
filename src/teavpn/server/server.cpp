@@ -140,8 +140,6 @@ uint8_t teavpn_server(server_config *config)
 
 	while (true) {
 
-		printf("xxx sent to %s:%d\n", inet_ntoa(entries[0].info.sin_addr), ntohs(entries[0].info.sin_port));
-
 		FD_ZERO(&rd_set);
 		FD_SET(tap_fd, &rd_set);
 		FD_SET(net_fd, &rd_set);
@@ -163,7 +161,7 @@ uint8_t teavpn_server(server_config *config)
 
 		if (FD_ISSET(tap_fd, &rd_set)) {
 			bufchan_index = get_buffer_channel_index();
-			bufchan[bufchan_index].length = read(tap_fd, bufchan[bufchan_index].buffer, CONNECTION_BUFFER);
+			bufchan[bufchan_index].length = read(tap_fd, bufchan[bufchan_index].buffer, UDP_BUFFER);
 			bufchan[bufchan_index].ref_count = entry_count;
 
 			for (uint16_t i = 0; i < entry_count; i++) {
@@ -177,29 +175,28 @@ uint8_t teavpn_server(server_config *config)
 			}
 
 			tap2net++;
-		} else {
-			printf("1wr\n");
-			fflush(stdout);
 		}
 
 		if (FD_ISSET(net_fd, &rd_set)) {
 			memset(&client_addr, 0, sizeof(client_addr));
 
 			bufchan_index = get_buffer_channel_index();
-			packet = (teavpn_packet *)bufchan[bufchan_index].bufptr;
 
 			bufchan[bufchan_index].length = recvfrom(
 				net_fd,
-				&(packet),
-				sizeof(packet->type) + sizeof(packet->seq),
+				bufchan[bufchan_index].buffer,
+				UDP_BUFFER,
 				MSG_WAITALL,
 				(struct sockaddr *)&(client_addr),
 				&remote_len
 			);
 
-			if (bufchan[bufchan_index].length != (sizeof(enum _teavpn_packet_type))) {
+			if (bufchan[bufchan_index].length < 0) {
+				perror("recvfrom");
 				goto gcd;
 			}
+
+			packet = (teavpn_packet *)bufchan[bufchan_index].bufptr;
 
 			if (packet->type == teavpn_packet_auth) {
 				bufchan[bufchan_index].ref_count = 1;
@@ -218,10 +215,10 @@ uint8_t teavpn_server(server_config *config)
 				}
 				net2tap++;
 			}
-		} else {
-			printf("2wr\n");
-			fflush(stdout);
 		}
+
+		printf("rok\n");
+		fflush(stdout);
 
 		gcd:
 		(void)0;
@@ -253,11 +250,19 @@ static void *thread_worker(uint64_t entry)
 		bufchan_index = entry & 0xffff,
 		conn_index = (entry >> 16) & 0xffff;
 	ssize_t nbytes;
+	char _connection_buffer[UDP_BUFFER + sizeof(teavpn_packet) + 24], *connection_buffer;
+	teavpn_packet *packet = (teavpn_packet *)_connection_buffer;
+	connection_buffer = &(_connection_buffer[DATA_PACKET_OFFSET]);
+
+	packet->seq = 0;
+	packet->type = teavpn_packet_data;
+	packet->tot_len = DATA_PACKET_OFFSET + bufchan[bufchan_index].length;
+	memcpy(connection_buffer, bufchan[bufchan_index].buffer, bufchan[bufchan_index].length);
 
 	nbytes = sendto(
 		net_fd,
-		bufchan[bufchan_index].buffer,
-		bufchan[bufchan_index].length,
+		_connection_buffer,
+		packet->tot_len,
 		MSG_CONFIRM,
 		(struct sockaddr *)&(entries[conn_index].info),
 		sizeof(struct sockaddr_in)
@@ -282,9 +287,51 @@ static void *thread_worker(uint64_t entry)
 
 static bool teavpn_client_auth(struct buffer_channel *bufchan, struct sockaddr_in *client_addr)
 {
-	
+	bool ret = false;
+	teavpn_packet packet;
+	struct teavpn_client_auth auth;
 
-	return true;
+	// write(1, &(bufchan->bufptr[DATA_PACKET_OFFSET]), bufchan->length);
+
+	bufchan->bufptr += DATA_PACKET_OFFSET;
+	memcpy(&(auth), bufchan->bufptr, sizeof(uint8_t) * 2);	
+	auth.username = bufchan->bufptr + (sizeof(uint8_t) * 2);
+	auth.password = bufchan->bufptr + (sizeof(uint8_t) * 2) + auth.username_len + 1;
+
+	// // Debug only.
+	// printf("username_len: %d\n", auth.username_len);
+	// printf("password_len: %d\n", auth.password_len);
+	// printf("username: \"%s\"\n", auth.username);
+	// printf("password: \"%s\"\n", auth.password);
+
+	if ((!strcmp(auth.username, "ammarfaizi2")) &&
+		(!strcmp(auth.password, "testQWE123!@"))) {
+		entries[entry_count].connected = true;
+		entries[entry_count].send_counter = 0;
+		entries[entry_count].recv_counter = 0;
+		memcpy(&(entries[entry_count].info), client_addr, sizeof(struct sockaddr_in));
+		entry_count++;
+		ret = true;
+
+		packet.seq = 0;
+		packet.type = teavpn_packet_ack;
+		packet.tot_len = sizeof(packet);
+		strcpy(packet.data.ack, "ok");
+
+		sendto(
+			net_fd,
+			&packet,
+			sizeof(packet),
+			MSG_CONFIRM,
+			(struct sockaddr *)client_addr,
+			sizeof(struct sockaddr_in)
+		);
+	}
+
+	bufchan->bufptr = bufchan->buffer;
+	bufchan->ref_count--;
+
+	return ret;
 
 	// struct client_auth auth;
 	// teavpn_packet *packet;

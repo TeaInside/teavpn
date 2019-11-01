@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 
+#define UDP_BUFFER 1400
 #define CONNECTION_BUFFER 4096
 
 typedef struct _server_config {
@@ -70,12 +71,12 @@ typedef struct _teavpn_config {
 enum _teavpn_packet_type {
 	teavpn_packet_auth = (1 << 0),
 	teavpn_packet_data = (1 << 1),
+	teavpn_packet_ack = (1 << 2)
 };
 
 struct teavpn_client_auth {
 	uint8_t username_len;
 	uint8_t password_len;
-	uint8_t seq;
 	char *username;
 	char *password;
 };
@@ -85,10 +86,14 @@ struct teavpn_data {
 	char buffer;
 };
 
+#define DATA_PACKET_OFFSET (sizeof(uint64_t) + sizeof(enum _teavpn_packet_type) + sizeof(uint16_t))
+
 typedef struct _teavpn_packet {
-	enum _teavpn_packet_type type;
 	uint64_t seq;
+	enum _teavpn_packet_type type;
+	uint16_t tot_len;
 	union {
+		char ack[3];
 		struct teavpn_client_auth *auth;
 		struct teavpn_data *tdata;
 	} data;
