@@ -12,11 +12,22 @@
 
 #include <teavpn/teavpn.h>
 
+#define BUFFER_CHANNEL_SIZE 6144
+
 uint8_t teavpn_server(server_config *config);
 
-typedef struct client_state_ {
-	int fd;
-	struct sockaddr_in addr;
-} client_state;
+struct connection_entry {
+	bool connected;
+	uint64_t send_counter;
+	uint64_t recv_counter;
+	struct sockaddr_in info;
+};
+
+struct buffer_channel {	
+	ssize_t length;
+	uint16_t ref_count;
+	void *bufptr;
+	char buffer[BUFFER_CHANNEL_SIZE];
+};
 
 #endif

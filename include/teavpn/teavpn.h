@@ -9,6 +9,9 @@
 #define __teavpn__teavpn_h
 
 #include <stdint.h>
+#include <arpa/inet.h>
+
+#define CONNECTION_BUFFER 4096
 
 typedef struct _server_config {
 	char *bind_addr;
@@ -18,7 +21,7 @@ typedef struct _server_config {
 	// Interface information
 	char *dev;
 	char *inet4;
-	char *inet4_bcmask;
+	char *inet4_broadcast;
 	uint16_t mtu;
 	// End interface information
 
@@ -34,9 +37,15 @@ typedef struct _client_config {
 
 	// Interface information
 	char *dev;
-	char *inet4;
 	uint16_t mtu;
 	// End interface information
+
+	// Credential information
+	char *username;
+	char *password;
+	uint8_t username_len;
+	uint8_t password_len;
+	// End credential information
 
 	uint16_t server_port;
 	uint8_t verbose_level;
@@ -58,12 +67,32 @@ typedef struct _teavpn_config {
 	enum _config_type type;
 } teavpn_config;
 
-typedef struct _interface_setting {
-	size_t inet4_len;
-	size_t inet4_bcmask_len;
-	char *inet4;
-	char *inet4_bcmask;
-} interface_setting;
+enum _teavpn_packet_type {
+	teavpn_packet_auth = (1 << 0),
+	teavpn_packet_data = (1 << 1),
+};
+
+struct teavpn_client_auth {
+	uint8_t username_len;
+	uint8_t password_len;
+	uint8_t auth_seq;
+	char *username;
+	char *password;
+};
+
+struct teavpn_data {
+	uint16_t length;
+	char buffer;
+};
+
+typedef struct _teavpn_packet {
+	enum _teavpn_packet_type type;
+	uint64_t seq;
+	union {
+		struct teavpn_auth *auth;
+		struct teavpn_data *tdata;
+	} data;
+} teavpn_packet;
 
 int tun_alloc(char *dev, int flags);
 void debug_log(uint8_t vlevel, const char *msg, ...);

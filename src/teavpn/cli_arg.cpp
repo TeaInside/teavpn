@@ -32,6 +32,8 @@ static const struct option client_options[] = {
 	{"port",			required_argument,		0,		'p'},
 	{"config",			required_argument,		0,		'c'},
 	{"config-file",		required_argument,		0,		'c'},
+	{"username",		required_argument,		0,		'u'},
+	{"password",		required_argument,		0,		'P'},
 	{"error-log",		required_argument,		0,		0x1},
 	{"verbose",			required_argument,		0,		0x2},
 	{"dev",				required_argument,		0,		0x3},
@@ -42,7 +44,7 @@ static const struct option client_options[] = {
 static char bind_any_addr[] = "0.0.0.0";
 static char default_dev_name[] = "teavpn";
 static char default_inet4[] = "5.5.0.1/16";
-static char default_inet4_bcmask[] = "5.5.255.255";
+static char default_inet4_broadcast[] = "5.5.255.255";
 
 static void show_help_client(char *appname);
 static void show_help_server(char *appname);
@@ -102,13 +104,13 @@ static bool server_argv_parser(char *appname, server_config *server, int argc, c
 	server->config_file = NULL;
 	server->mtu = 1500;
 	server->inet4 = default_inet4;
-	server->inet4_bcmask = default_inet4_bcmask;
+	server->inet4_broadcast = default_inet4_broadcast;
 	server->dev = default_dev_name;
 
 	while (true) {
 
 		option_index = 0;
-		c = getopt_long(argc, argv, "h:p:t:vc:", server_options, &option_index);
+		c = getopt_long(argc, argv, "h:p:t:vc:u:P:", server_options, &option_index);
 		if (c == -1) break;
 
 		switch (c) {
@@ -182,6 +184,8 @@ static bool client_argv_parser(char *appname, client_config *client, int argc, c
 {
 	int c, option_index;
 
+	static char _password[255];
+
 	// Set default config.
 	client->server_ip = NULL;
 	client->server_port = 55555;
@@ -189,7 +193,6 @@ static bool client_argv_parser(char *appname, client_config *client, int argc, c
 	client->error_log_file = NULL;
 	client->config_file = NULL;
 	client->mtu = 1500;
-	client->inet4 = NULL;
 	client->dev = default_dev_name;
 
 	while (true) {
@@ -213,6 +216,17 @@ static bool client_argv_parser(char *appname, client_config *client, int argc, c
 
 			case 'c':
 				client->config_file = optarg;
+				break;
+
+			case 'u':
+				client->username = optarg;
+				client->username_len = strlen(optarg);
+				break;
+
+			case 'P':
+				strcpy(_password, optarg);
+				client->password = _password;
+				client->password_len = strlen(optarg);
 				break;
 
 			case 0x1:
