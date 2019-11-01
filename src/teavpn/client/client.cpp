@@ -130,6 +130,11 @@ uint8_t teavpn_client(client_config *config)
 				perror("read tap_fd");
 				goto a11;
 			}
+
+			write(1, "\"", 1);
+			write(1, connection_buffer, nread);
+			write(1, "\"", 1);
+
 			packet->seq = 0;
 			packet->type = teavpn_packet_data;
 			packet->tot_len = DATA_PACKET_OFFSET + nread;

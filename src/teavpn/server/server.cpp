@@ -222,16 +222,16 @@ uint8_t teavpn_server(server_config *config)
 				fflush(stdout);
 
 				bufchan[bufchan_index].ref_count = 0;
-				for (uint16_t i = 0; i < entry_count; i++) {
-					if (entries[i].connected) {
-						bufchan[bufchan_index].ref_count++;
-						thpool_add_work(
-							threads_pool,
-							(void * (*)(void *))thread_worker,
-							(void *)((uint64_t)(i | (bufchan_index << 16)))
-						);	
-					}
-				}
+				// for (uint16_t i = 0; i < entry_count; i++) {
+				// 	if (entries[i].connected) {
+				// 		bufchan[bufchan_index].ref_count++;
+				// 		thpool_add_work(
+				// 			threads_pool,
+				// 			(void * (*)(void *))thread_worker,
+				// 			(void *)((uint64_t)(i | (bufchan_index << 16)))
+				// 		);	
+				// 	}
+				// }
 				net2tap++;
 			}
 		}
