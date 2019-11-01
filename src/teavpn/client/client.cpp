@@ -35,7 +35,8 @@ extern uint8_t verbose_level;
 
 static bool teavpn_client_connect_auth(client_config *config);
 
-int net_fd;
+static int net_fd;
+static int tap_fd;
 struct sockaddr_in *server_addr;
 
 /**
@@ -45,7 +46,7 @@ struct sockaddr_in *server_addr;
 uint8_t teavpn_client(client_config *config)
 {
 	fd_set rd_set;
-	int fd_ret, max_fd, tap_fd;
+	int fd_ret, max_fd;
 	struct sockaddr_in _server_addr;
 	socklen_t remote_len = sizeof(struct sockaddr_in);
 	char connection_buffer[CONNECTION_BUFFER], config_buffer[4096];
@@ -57,6 +58,11 @@ uint8_t teavpn_client(client_config *config)
 			printf("Config error!\n");
 			return 1;
 		}
+	}
+
+	if (config->server_ip == NULL) {
+		printf("Error: server_ip is not set!\n");
+		return 1;
 	}
 
 	verbose_level = config->verbose_level;
@@ -78,10 +84,10 @@ uint8_t teavpn_client(client_config *config)
 	}
 	debug_log(1, "UDP socket created successfully\n");
 
-	memset(&server_addr, 0, sizeof(server_addr));
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = inet_addr(config->server_ip);
-	server_addr.sin_port = htons(config->server_port);
+	memset(server_addr, 0, sizeof(*server_addr));
+	server_addr->sin_family = AF_INET;
+	server_addr->sin_addr.s_addr = inet_addr(config->server_ip);
+	server_addr->sin_port = htons(config->server_port);
 
 	debug_log(0, "Connecting to %s:%d...\n", config->server_ip, config->server_port);
 
@@ -125,7 +131,7 @@ static bool teavpn_client_connect_auth(client_config *config)
 
 	packet.type = teavpn_packet_auth;
 
-	auth.seq = 0
+	auth.seq = 0;
 	auth.username = config->username;
 	auth.password = config->password;
 	auth.username_len = config->username_len;
@@ -146,4 +152,6 @@ static bool teavpn_client_connect_auth(client_config *config)
 		perror("Error sendto");
 		return false;
 	}
+
+	return true;
 }

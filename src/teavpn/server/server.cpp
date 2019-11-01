@@ -39,8 +39,8 @@
 extern char **_argv;
 extern uint8_t verbose_level;
 
-int tap_fd;
-int net_fd;
+static int tap_fd;
+static int net_fd;
 int16_t entry_count = 0;
 struct buffer_channel *bufchan;
 struct connection_entry *entries;

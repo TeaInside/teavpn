@@ -75,7 +75,7 @@ enum _teavpn_packet_type {
 struct teavpn_client_auth {
 	uint8_t username_len;
 	uint8_t password_len;
-	uint8_t auth_seq;
+	uint8_t seq;
 	char *username;
 	char *password;
 };
@@ -89,7 +89,7 @@ typedef struct _teavpn_packet {
 	enum _teavpn_packet_type type;
 	uint64_t seq;
 	union {
-		struct teavpn_auth *auth;
+		struct teavpn_client_auth *auth;
 		struct teavpn_data *tdata;
 	} data;
 } teavpn_packet;

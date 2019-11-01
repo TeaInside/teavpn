@@ -20,8 +20,8 @@ uint8_t verbose_level = 0;
 
 void debug_log(uint8_t vlevel, const char *msg, ...)
 {
-	va_list argp;
 	if (vlevel <= verbose_level) {
+		va_list argp;
 		va_start(argp, msg);
 		vfprintf(stdout, msg, argp);
 		va_end(argp);
