@@ -165,6 +165,7 @@ uint8_t teavpn_server(server_config *config)
 			bufchan[bufchan_index].length = read(tap_fd, bufchan[bufchan_index].buffer, UDP_BUFFER);
 			bufchan[bufchan_index].ref_count = entry_count;
 
+			// Debug only.
 			printf("1 from tap_fd: %ld bytes\n", bufchan[bufchan_index].length);
 			fflush(stdout);
 
