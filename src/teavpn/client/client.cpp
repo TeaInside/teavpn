@@ -46,6 +46,7 @@ struct sockaddr_in *server_addr;
 uint8_t teavpn_client(client_config *config)
 {
 	fd_set rd_set;
+	struct iphdr *ipdr;
 	int fd_ret, max_fd;
 	teavpn_packet *packet;
 	ssize_t nread, nwrite;
@@ -131,9 +132,21 @@ uint8_t teavpn_client(client_config *config)
 				goto a11;
 			}
 
-			write(1, "\"", 1);
-			write(1, connection_buffer, nread);
-			write(1, "\"", 1);
+			ipdr = (struct iphdr *)(connection_buffer + 4);
+
+			printf("saddr: \"%d.%d.%d.%d\"\n",
+				(ipdr->saddr) & 0xff,
+				(ipdr->saddr >> 8) & 0xff,
+				(ipdr->saddr >> 16) & 0xff,
+				(ipdr->saddr >> 24) & 0xff
+			);
+			printf("daddr: \"%d.%d.%d.%d\"\n",
+				(ipdr->daddr) & 0xff,
+				(ipdr->daddr >> 8) & 0xff,
+				(ipdr->daddr >> 16) & 0xff,
+				(ipdr->daddr >> 24) & 0xff
+			);
+			fflush(stdout);
 
 			packet->seq = 0;
 			packet->type = teavpn_packet_data;
