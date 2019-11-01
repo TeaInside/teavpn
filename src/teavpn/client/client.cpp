@@ -97,7 +97,7 @@ uint8_t teavpn_client(client_config *config)
 
 	debug_log(0, "Connecting to %s:%d...\n", config->server_ip, config->server_port);
 
-	if (!teavpn_client_connect_auth(config)) {
+	if (!teavpn_client_connect_auth(config)) `{
 		close(net_fd);
 		close(tap_fd);
 		printf("Connection failed!\n");
@@ -146,6 +146,9 @@ uint8_t teavpn_client(client_config *config)
 				perror("sendto net_fd");
 				goto a11;
 			}
+
+			printf("sent %ld bytes\n", nwrite);
+			fflush(stdout);
 		}
 
 		a11:
@@ -162,6 +165,9 @@ uint8_t teavpn_client(client_config *config)
 				perror("recvfrom net_fd");
 				goto a12;
 			}
+
+			printf("got %ld bytes\n", nread);
+			fflush(stdout);
 
 			nwrite = write(tap_fd, connection_buffer, packet->tot_len - DATA_PACKET_OFFSET);
 			if (nwrite < 0) {

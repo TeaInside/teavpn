@@ -164,6 +164,9 @@ uint8_t teavpn_server(server_config *config)
 			bufchan[bufchan_index].length = read(tap_fd, bufchan[bufchan_index].buffer, UDP_BUFFER);
 			bufchan[bufchan_index].ref_count = entry_count;
 
+			printf("read from tap_fd: %d bytes\n", bufchan[bufchan_index].length);
+			fflush(stdout);
+
 			for (uint16_t i = 0; i < entry_count; i++) {
 				if (entries[i].connected) {
 					thpool_add_work(
@@ -190,6 +193,9 @@ uint8_t teavpn_server(server_config *config)
 				(struct sockaddr *)&(client_addr),
 				&remote_len
 			);
+
+			printf("read from net_fd: %d bytes\n", bufchan[bufchan_index].length);
+			fflush(stdout);
 
 			if (bufchan[bufchan_index].length < 0) {
 				perror("recvfrom");
@@ -249,11 +255,20 @@ static void *thread_worker(uint64_t entry)
 	uint16_t
 		bufchan_index = entry & 0xffff,
 		conn_index = (entry >> 16) & 0xffff;
+
 	ssize_t nbytes;
 	char _connection_buffer[UDP_BUFFER + sizeof(teavpn_packet) + 24], *connection_buffer;
 	teavpn_packet *packet = (teavpn_packet *)_connection_buffer;
-	connection_buffer = &(_connection_buffer[DATA_PACKET_OFFSET]);
 
+	if ((*((uint32_t *)(&(entries[conn_index].info.sin_addr)))) == 0) {
+		entries[conn_index].connected = false;
+		printf("Client disconnected!\n");
+		printf("conn_index: %d\n", conn_index);
+		fflush(stdout);
+		goto ret;
+	}
+
+	connection_buffer = &(_connection_buffer[DATA_PACKET_OFFSET]);
 	packet->seq = 0;
 	packet->type = teavpn_packet_data;
 	packet->tot_len = DATA_PACKET_OFFSET + bufchan[bufchan_index].length;
@@ -280,6 +295,7 @@ static void *thread_worker(uint64_t entry)
 		perror("sendto");
 	}
 
+	ret:
 	bufchan[bufchan_index].ref_count--;
 	return NULL;
 }
