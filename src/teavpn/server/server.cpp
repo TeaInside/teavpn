@@ -140,8 +140,6 @@ uint8_t teavpn_server(server_config *config)
 
 	while (true) {
 
-		printf("xxx sent to %s:%d\n", inet_ntoa(entries[0].info.sin_addr), ntohs(entries[0].info.sin_port));
-
 		FD_ZERO(&rd_set);
 		FD_SET(tap_fd, &rd_set);
 		FD_SET(net_fd, &rd_set);
@@ -177,9 +175,6 @@ uint8_t teavpn_server(server_config *config)
 			}
 
 			tap2net++;
-		} else {
-			printf("1wr\n");
-			fflush(stdout);
 		}
 
 		if (FD_ISSET(net_fd, &rd_set)) {
@@ -218,9 +213,6 @@ uint8_t teavpn_server(server_config *config)
 				}
 				net2tap++;
 			}
-		} else {
-			printf("2wr\n");
-			fflush(stdout);
 		}
 
 		gcd:
