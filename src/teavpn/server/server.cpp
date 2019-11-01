@@ -58,6 +58,7 @@ static bool teavpn_client_auth(struct buffer_channel *bufchan, struct sockaddr_i
 uint8_t teavpn_server(server_config *config)
 {
 	fd_set rd_set;
+	ssize_t nwrite;
 	int fd_ret, max_fd;
 	int16_t bufchan_index;
 	teavpn_packet *packet;
@@ -208,10 +209,22 @@ uint8_t teavpn_server(server_config *config)
 				bufchan[bufchan_index].ref_count = 1;
 				teavpn_client_auth(&(bufchan[bufchan_index]), &client_addr);
 			} else if (packet->type == teavpn_packet_data) {
-				bufchan[bufchan_index].ref_count = entry_count;
-				write(tap_fd, bufchan[bufchan_index].buffer, bufchan[bufchan_index].length);
+
+				nwrite = write(
+					tap_fd,
+					bufchan->bufptr + DATA_PACKET_OFFSET,
+					packet->tot_len - DATA_PACKET_OFFSET
+				);
+				if (nwrite < 0) {
+					perror("write tap_fd");
+				}
+				printf("written to tap_fd: %ld bytes\n", nwrite);
+				fflush(stdout);
+
+				bufchan[bufchan_index].ref_count = 0;
 				for (uint16_t i = 0; i < entry_count; i++) {
 					if (entries[i].connected) {
+						bufchan[bufchan_index].ref_count++;
 						thpool_add_work(
 							threads_pool,
 							(void * (*)(void *))thread_worker,
