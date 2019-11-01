@@ -27,10 +27,10 @@ int main(int argc, char **_argv, char **envp)
 
 	switch (config.type) {
 		case teavpn_server_config:
-			exit_code = teavpn_server(&(config.config.server));
+			exit_code = teavpn_tcp_server(&(config.config.server));
 			break;
 		case teavpn_client_config:
-			exit_code = teavpn_client(&(config.config.client));
+			exit_code = teavpn_tcp_client(&(config.config.client));
 			break;
 		default:
 			printf("Invalid config type\n");

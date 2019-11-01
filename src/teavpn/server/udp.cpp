@@ -55,7 +55,7 @@ static bool teavpn_client_auth(struct buffer_channel *bufchan, struct sockaddr_i
  * @param server_config *config
  * @return uint8_t
  */
-uint8_t teavpn_server(server_config *config)
+uint8_t teavpn_udp_server(server_config *config)
 {
 	fd_set rd_set;
 	ssize_t nwrite;

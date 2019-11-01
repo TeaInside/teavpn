@@ -15,7 +15,8 @@
 
 #define BUFFER_CHANNEL_SIZE (UDP_BUFFER + 1)
 
-uint8_t teavpn_server(server_config *config);
+uint8_t teavpn_udp_server(server_config *config);
+uint8_t teavpn_tcp_server(server_config *config);
 
 struct connection_entry {
 	bool connected;
