@@ -306,10 +306,10 @@ static void *teavpn_thread_worker(uint64_t entry)
 		}
 	}
 
-	printf("write bytes: %ld\n", nwrite);
-	printf("bufchan_index: %d\n", bufchan_index);
-	printf("entry_index: %d\n", entry_index);
-	fflush(stdout);
+	// printf("write bytes: %ld\n", nwrite);
+	// printf("bufchan_index: %d\n", bufchan_index);
+	// printf("entry_index: %d\n", entry_index);
+	// fflush(stdout);
 
 	bufchan[bufchan_index].ref_count--;
 }
