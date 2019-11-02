@@ -266,9 +266,9 @@ static void *teavpn_thread_worker(uint64_t entry)
 		perror("Error write to client");
 	}
 
-	// printf("bufchan_index: %d\n", bufchan_index);
-	// printf("entry_index: %d\n", entry_index);
-	// fflush(stdout);
+	printf("bufchan_index: %d\n", bufchan_index);
+	printf("entry_index: %d\n", entry_index);
+	fflush(stdout);
 
 	bufchan[bufchan_index].ref_count--;
 }
