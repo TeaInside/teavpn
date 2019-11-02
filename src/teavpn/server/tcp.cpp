@@ -219,6 +219,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 					} while (bufchan_index == -1);
 
 					packet = (struct teavpn_packet *)bufchan[bufchan_index].buffer;
+					packet->info.type = TEAVPN_PACKET_DATA;
 					bufchan[bufchan_index].ref_count = 0;
 					bufchan[bufchan_index].length = read(entries[i].fd, packet, sizeof(*packet));
 
