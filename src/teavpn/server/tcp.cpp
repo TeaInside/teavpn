@@ -261,7 +261,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 					packet = (struct teavpn_packet *)bufchan[bufchan_index].buffer;
 					packet->info.type = TEAVPN_PACKET_DATA;
 					bufchan[bufchan_index].ref_count = 0;
-					bufchan[bufchan_index].length = read(entries[i].fd, packet, sizeof(packet->info));
+					bufchan[bufchan_index].length = read(entries[i].fd, packet, TEAVPN_PACKET_BUFFER);
 
 					if (bufchan[bufchan_index].length <= 0) {
 						entries[i].error++;
@@ -273,7 +273,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 						goto next_2;
 					}
 
-					read_n(entries[i].fd, packet->data, packet->info.len);
+					// read_n(entries[i].fd, packet->data, packet->info.len);
 
 					nwrite = write(tap_fd, packet->data, bufchan[bufchan_index].length - sizeof(packet->info));
 					if (nwrite < 0) {

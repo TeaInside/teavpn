@@ -219,13 +219,13 @@ uint8_t teavpn_tcp_client(client_config *config)
 		if (FD_ISSET(net_fd, &rd_set)) {
 			net2tap++;
 
-			nread = read(net_fd, &packet, sizeof(packet.info));
+			nread = read(net_fd, &packet, TEAVPN_PACKET_BUFFER);
 			if (nread < 0) {
 				perror("Error read net_fd");
 				goto next_2;
 			}
 
-			read_n(net_fd, packet.data, packet.info.len);
+			// read_n(net_fd, packet.data, packet.info.len);
 
 			// printf("packet type: %d\n",packet.info.type);
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
