@@ -186,6 +186,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 		if (FD_ISSET(tap_fd, &rd_set)) {
 			tap2net++;
 			packet = (struct teavpn_packet *)bufchan[bufchan_index].buffer;
+			packet->info.type = TEAVPN_PACKET_DATA;
 			bufchan[bufchan_index].ref_count = 0;
 			bufchan[bufchan_index].length = read(tap_fd, packet->data, sizeof(packet->data));
 
