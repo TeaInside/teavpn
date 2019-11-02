@@ -240,8 +240,6 @@ uint8_t teavpn_tcp_server(server_config *config)
 							);
 						}
 					}
-				} else {
-					entries[i].connected = false;
 				}
 			}
 		}
