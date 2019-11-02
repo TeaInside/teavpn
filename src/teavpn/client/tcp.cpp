@@ -204,6 +204,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 				goto next_2;
 			}
 
+			printf("%d\n",packet.info.type);
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
 				nwrite = write(tap_fd, packet.data, nread - sizeof(packet.info));
 				debug_log(3, "write to tap_fd %ld bytes\n", nwrite);
