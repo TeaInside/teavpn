@@ -41,6 +41,7 @@ extern uint8_t verbose_level;
 
 static int tap_fd;
 static int net_fd;
+static int pipe_fd[2];
 static uint16_t entry_count = 0;
 static struct buffer_channel *bufchan;
 static struct connection_entry *entries;
@@ -59,6 +60,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 {
 	fd_set rd_set;
 	ssize_t nwrite;
+	char pipe_buf[10];
 	int fd_ret, max_fd;
 	int16_t bufchan_index;
 	threadpool threads_pool;
@@ -94,6 +96,11 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 	if (config->data_dir == NULL) {
 		printf("Data dir cannot be empty!\n");
+		return 1;
+	}
+
+	if (pipe(pipe_fd) < 0) {
+		perror("Cannot open pipe");
 		return 1;
 	}
 
@@ -158,6 +165,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 		max_fd = tap_fd;
 		FD_ZERO(&rd_set);
 		FD_SET(tap_fd, &rd_set);
+		FD_SET(pipe_fd[0], &rd_set);
 
 		for (uint16_t i = 0; i < entry_count; i++) {
 			if (entries[i].connected) {
@@ -258,6 +266,10 @@ uint8_t teavpn_tcp_server(server_config *config)
 		}
 
 		next_2:
+		if (FD_ISSET(pipe_fd[0], &rd_set)) {
+			read(pipe_fd[0], pipe_buf, 10);
+		}
+
 		(void)0;
 	}
 }
@@ -416,6 +428,7 @@ static void *teavpn_accept_connection(void *ptr)
 
 				entries[entry_count].connected = true;
 				entry_count++;
+				write(pipe_fd[1], "aaaaaaaaaa", 10); // Interupt select.
 			} else {
 				packet.info.type = TEAVPN_PACKET_RST;
 				nwrite = write(client_fd, &packet, sizeof(packet.info));
