@@ -38,7 +38,7 @@ extern uint8_t verbose_level;
 
 static int tap_fd;
 static int net_fd;
-static void teavpn_client_init_iface(client_config *config, struct teavpn_client_ip *ip);
+static bool teavpn_client_init_iface(client_config *config, struct teavpn_client_ip *ip);
 
 /**
  * @param client_config *config
@@ -155,8 +155,13 @@ uint8_t teavpn_tcp_client(client_config *config)
 	printf("inet4: \"%s\"\n", client_ip->inet4);
 	printf("inet4_broadcast: \"%s\"\n", client_ip->inet4_broadcast);
 	fflush(stdout);
-	teavpn_client_init_iface(config, client_ip);
 	#endif
+
+	if (!teavpn_client_init_iface(config, client_ip)) {
+		printf("Cannot init interface\n");
+		close(tap_fd);
+		return 1;
+	}
 
 	max_fd = (tap_fd > net_fd) ? tap_fd : net_fd;
 	packet.info.type = TEAVPN_PACKET_DATA;
@@ -235,39 +240,91 @@ uint8_t teavpn_tcp_client(client_config *config)
  * @param struct teavpn_client_ip *ip
  * @return void
  */
-static void teavpn_client_init_iface(client_config *config, struct teavpn_client_ip *ip)
+static bool teavpn_client_init_iface(client_config *config, struct teavpn_client_ip *ip)
 {
-	char cmd1[100], cmd2[100],
+	bool ret;
+	char cmd[100],
+		data[100],
 		*escaped_dev,
 		*escaped_inet4,
-		*escaped_inet4_broadcast;
+		*escaped_inet4_broadcast,
+		*p, *q;
+	FILE *fp = NULL;
 
 	escaped_dev = escapeshellarg(config->dev);
 	escaped_inet4 = escapeshellarg(ip->inet4);
 	escaped_inet4_broadcast = escapeshellarg(ip->inet4_broadcast);
 
+	/**
+	 * Set interface up.
+	 */
 	sprintf(
-		cmd1,
+		cmd,
 		"/sbin/ip link set dev %s up mtu %d",
 		escaped_dev,
 		config->mtu
 	);
+	debug_log(1, "Executing: %s\n", cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
 
+
+	/**
+	 * Assign private IP.
+	 */
 	sprintf(
-		cmd2,
+		cmd,
 		"/sbin/ip addr add dev %s %s broadcast %s",
 		escaped_dev,
 		escaped_inet4,
 		escaped_inet4_broadcast
 	);
+	debug_log(1, "Executing: %s\n", cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
 
+	/**
+	 * Get server route data.
+	 */
+	sprintf(cmd, "/sbin/ip route get %s", config->server_ip);
+	debug_log(1, "Executing: %s\n", cmd);
+	fp = popen(cmd, "r");
+	fgets(data, 99, fp);
+	pclose(fp);
+
+	p = strstr(data, "via");
+	if (p == NULL) {
+		printf("Cannot get server route via\n");
+		ret = false;
+		goto ret;
+	}
+	while ((*p) != ' ') p++;
+	p++;
+	q = p;
+	while ((*q) != ' ') q++;
+	*q = '\0';
+
+
+	sprintf(cmd, "/sbin/ip route add %s/32 via %s", config->server_ip, p);
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
+
+	sprintf(cmd, "/sbin/ip route add 0.0.0.0/1 via %s", "5.5.0.1");
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
+
+	sprintf(cmd, "/sbin/ip route add 128.0.0.0/1 via %s", "5.5.0.1");
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
+
+	ret = true;
+ret:
 	free(escaped_dev);
 	free(escaped_inet4);
 	free(escaped_inet4_broadcast);
-
-	debug_log(1, "Executing: %s\n", cmd1);
-	system(cmd1);
-
-	debug_log(1, "Executing: %s\n", cmd2);
-	system(cmd2);
+	return ret;
 }

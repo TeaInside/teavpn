@@ -50,7 +50,7 @@ static int16_t get_buffer_channel_index();
 static void *teavpn_accept_connection(void *);
 static void *teavpn_thread_worker(uint64_t entry);
 static bool teavpn_server_socket_setup(int sock_fd);
-static void teavpn_server_init_iface(server_config *config);
+static bool teavpn_server_init_iface(server_config *config);
 
 /**
  * @param server_config *config
@@ -114,7 +114,11 @@ uint8_t teavpn_tcp_server(server_config *config)
 	debug_log(0, "Successfully created a new interface \"%s\".\n", config->dev);
 
 	// Initialize TUN/TAP interface.
-	teavpn_server_init_iface(config);
+	if (teavpn_server_init_iface(config)) {
+		printf("Cannot init interface\n");
+		close(tap_fd);
+		return 1;
+	}
 
 	// Create TCP socket.
 	debug_log(1, "Creating TCP socket...\n");
@@ -127,6 +131,8 @@ uint8_t teavpn_tcp_server(server_config *config)
 	// Setting up socket.
 	debug_log(1, "Setting up socket file descriptor...\n");
 	if (!teavpn_server_socket_setup(net_fd)) {
+		close(net_fd);
+		close(tap_fd);
 		return 1;
 	}
 	debug_log(1, "Socket file descriptor set up successfully\n");
@@ -143,12 +149,16 @@ uint8_t teavpn_tcp_server(server_config *config)
 	// Bind socket to interface.
 	if (bind(net_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
 		perror("Bind failed");
+		close(net_fd);
+		close(tap_fd);
 		return 1;
 	}
 
 	// Listen
 	if (listen(net_fd, 3) < 0) {
 		perror("Listen failed");
+		close(net_fd);
+		close(tap_fd);
 		return 1;
 	}
 
@@ -503,7 +513,7 @@ static bool teavpn_server_socket_setup(int sock_fd)
  * @param char *dev
  * @return void
  */
-static void teavpn_server_init_iface(server_config *config)
+static bool teavpn_server_init_iface(server_config *config)
 {
 	char cmd1[100], cmd2[100],
 		*escaped_dev,
@@ -534,8 +544,14 @@ static void teavpn_server_init_iface(server_config *config)
 	free(escaped_inet4_broadcast);
 
 	debug_log(1, "Executing: %s\n", cmd1);
-	system(cmd1);
+	if (system(cmd1)) {
+		return false;
+	}
 
 	debug_log(1, "Executing: %s\n", cmd2);
-	system(cmd2);
+	if (system(cmd2)) {
+		return false;
+	}
+
+	return true;
 }

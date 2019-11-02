@@ -6,6 +6,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <teavpn/teavpn.h>
 #include <teavpn/cli_arg.h>
 #include <teavpn/teavpn_server.h>

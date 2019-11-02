@@ -69,9 +69,10 @@ typedef struct _teavpn_config {
 struct teavpn_client_ip {
 	char inet4[sizeof("xxx.xxx.xxx.xxx/xx")];
 	char inet4_broadcast[sizeof("xxx.xxx.xxx.xxx")];
+	char inet4_route[sizeof("xxx.xxx.xxx.xxx")];
 };
 
-#define TEAVPN_PACKET_BUFFER 1500
+#define TEAVPN_PACKET_BUFFER 5000
 
 /**
  * TeaVPN Packet.
