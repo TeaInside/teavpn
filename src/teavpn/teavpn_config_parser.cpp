@@ -109,6 +109,12 @@ bool teavpn_server_config_parser(char *internal_buf, server_config *config)
 			config->bind_port = (uint16_t)atoi(&(buffer[k]));
 		} else if (!strcmp(&(buffer[j]), "threads")) {
 			config->threads = (uint8_t)atoi(&(buffer[k]));
+		} else if (!strcmp(&(buffer[j]), "data_dir")) {
+			strcpy(internal_buf, &(buffer[k]));
+			config->data_dir = internal_buf;
+			internal_buf += strlen(internal_buf) + 1;
+		} else {
+			printf("Invalid config key \"%s\" on line %d\n", &(buffer[j]), line);
 		}
 
 		line++;

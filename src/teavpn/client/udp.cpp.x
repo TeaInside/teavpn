@@ -43,7 +43,7 @@ struct sockaddr_in *server_addr;
  * @param server_config *config
  * @return uint8_t
  */
-uint8_t teavpn_client(client_config *config)
+uint8_t teavpn_udp_client(client_config *config)
 {
 	fd_set rd_set;
 	struct iphdr *ipdr;
