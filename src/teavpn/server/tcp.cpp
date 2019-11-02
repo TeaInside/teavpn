@@ -224,7 +224,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 					packet->info.type = TEAVPN_PACKET_DATA;
 					bufchan[bufchan_index].ref_count = 0;
 					bufchan[bufchan_index].length = read(entries[i].fd, packet, sizeof(*packet));
-					if (bufchan[bufchan_index].length < 0) {
+					if (bufchan[bufchan_index].length <= 0) {
 						entries[i].error++;
 						if (entries[i].error > 5) {
 							entries[i].connected = false;
