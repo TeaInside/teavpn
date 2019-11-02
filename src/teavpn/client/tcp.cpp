@@ -192,7 +192,9 @@ uint8_t teavpn_tcp_client(client_config *config)
 				goto next;
 			}
 
-			nwrite = write(net_fd, &packet, sizeof(packet.info) + nread);
+			packet.info.len = sizeof(packet.info) + nread;
+
+			nwrite = write(net_fd, &packet, packet.info.len);
 			if (nwrite < 0) {
 				perror("Error write net_fd");
 				goto next;
@@ -207,6 +209,16 @@ uint8_t teavpn_tcp_client(client_config *config)
 			if (nread < 0) {
 				perror("Error read net_fd");
 				goto next_2;
+			}
+
+			while (nread < packet.info.len) {
+				nread += read(
+					net_fd,
+					((char *)&packet) + nread,
+					sizeof(packet)
+				);
+				printf("Extra reading...\n");
+				fflush(stdout);
 			}
 
 			// printf("packet type: %d\n",packet.info.type);

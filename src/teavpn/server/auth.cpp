@@ -42,7 +42,6 @@ FILE *teavpn_auth_check(server_config *config, struct teavpn_packet_auth *auth)
 		}
 	}
 
-close:
 	fclose(h1);
 	return h2;
 }

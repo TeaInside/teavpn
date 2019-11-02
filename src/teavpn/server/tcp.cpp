@@ -234,6 +234,8 @@ uint8_t teavpn_tcp_server(server_config *config)
 		for (uint16_t i = 0; i < entry_count; i++) {
 			if (FD_ISSET(entries[i].fd, &rd_set)) {
 				if (entries[i].connected) {
+					net2tap++;
+
 					do {
 						bufchan_index = get_buffer_channel_index();
 					} while (bufchan_index == -1);
@@ -250,6 +252,16 @@ uint8_t teavpn_tcp_server(server_config *config)
 						}
 						perror("read from client fd");
 						goto next_2;
+					}
+
+					while (bufchan[bufchan_index].length < packet->info.len) {
+						bufchan[bufchan_index].length += read(
+							entries[i].fd,
+							((char *)packet) + bufchan[bufchan_index].length,
+							sizeof(*packet)
+						);
+						printf("Extra reading...\n");
+						fflush(stdout);
 					}
 
 					nwrite = write(tap_fd, packet->data, bufchan[bufchan_index].length - sizeof(packet->info));
@@ -312,6 +324,8 @@ static void *teavpn_thread_worker(uint64_t entry)
 	// fflush(stdout);
 
 	bufchan[bufchan_index].ref_count--;
+
+	return NULL;
 }
 
 /**
@@ -454,6 +468,8 @@ static void *teavpn_accept_connection(void *ptr)
 		next:
 		(void)0;
 	}
+
+	return NULL;
 
 	#undef auth
 	#undef config
