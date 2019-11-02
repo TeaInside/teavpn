@@ -228,7 +228,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 						goto next_2;
 					}
 
-					debug_log(3, "write to tap_fd %ld bytes\n", bufchan[bufchan_index].length);
+					debug_log(3, "write to tap_fd %ld bytes\n", nwrite);
 
 					for (uint16_t j = 0; j < entry_count; j++) {
 						if (entries[j].connected && (j != i)) {
