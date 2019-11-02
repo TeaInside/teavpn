@@ -217,7 +217,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 					((char *)&packet) + nread,
 					sizeof(packet)
 				);
-				printf("Extra reading...\n");
+				printf("Extra reading... %ld : %d\n", nread, packet.info.len);
 				fflush(stdout);
 			}
 

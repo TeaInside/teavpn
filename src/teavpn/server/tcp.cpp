@@ -216,6 +216,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 			debug_log(3, "read from tap_fd %ld bytes\n", bufchan[bufchan_index].length);
 			bufchan[bufchan_index].length += sizeof(packet->info);
+			packet->info.len = bufchan[bufchan_index].length;
 
 			for (uint16_t i = 0; i < entry_count; i++) {
 				if (entries[i].connected) {
@@ -260,7 +261,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 							((char *)packet) + bufchan[bufchan_index].length,
 							sizeof(*packet)
 						);
-						printf("Extra reading...\n");
+						printf("Extra reading %ld / %d...\n", bufchan[bufchan_index].length, packet->info.len);
 						fflush(stdout);
 					}
 
