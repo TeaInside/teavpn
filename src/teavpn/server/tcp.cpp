@@ -237,6 +237,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 					nwrite = write(tap_fd, packet->data, bufchan[bufchan_index].length - sizeof(packet->info));
 					if (nwrite < 0) {
 						perror("write to tap_fd");
+						entries[i].error++;
 						goto next_2;
 					}
 
