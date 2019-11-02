@@ -74,6 +74,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 	bufchan = _bufchan;
 
 	for (uint8_t i = 0; i < MAX_CLIENT_ENTRY; i++) {
+		entries[i].error = 0;
 		entries[i].connected = false;
 	}
 
@@ -223,6 +224,15 @@ uint8_t teavpn_tcp_server(server_config *config)
 					packet->info.type = TEAVPN_PACKET_DATA;
 					bufchan[bufchan_index].ref_count = 0;
 					bufchan[bufchan_index].length = read(entries[i].fd, packet, sizeof(*packet));
+					if (bufchan[bufchan_index].length < 0) {
+						entries[i].error++;
+						if (entries[i].error > 5) {
+							entries[i].connected = false;
+							close(entries[i].fd);
+						}
+						perror("read from client fd");
+						goto next_2;
+					}
 
 					nwrite = write(tap_fd, packet->data, bufchan[bufchan_index].length - sizeof(packet->info));
 					if (nwrite < 0) {
@@ -265,7 +275,12 @@ static void *teavpn_thread_worker(uint64_t entry)
 	entries[entry_index].send_counter++;
 	nwrite = write(entries[entry_index].fd, bufchan[bufchan_index].buffer, bufchan[bufchan_index].length);
 	if (nwrite < 0) {
+		entries[entry_index].error++;
 		perror("Error write to client");
+		if (entries[entry_index].error > 5) {
+			entries[entry_index].connected = false;
+			close(entries[entry_index].fd);
+		}
 	}
 
 	printf("write bytes: %ld\n", nwrite);

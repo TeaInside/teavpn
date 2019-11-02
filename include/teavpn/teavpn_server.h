@@ -19,6 +19,7 @@ uint8_t teavpn_tcp_server(server_config *config);
 
 struct connection_entry {
 	bool connected;
+	uint8_t error;
 	int fd;
 	uint32_t priv_ip;
 	uint64_t send_counter;
