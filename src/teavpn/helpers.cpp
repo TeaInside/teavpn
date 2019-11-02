@@ -5,6 +5,9 @@
  * @package TeaVPN
  */
 
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <teavpn/helpers.h>
 
 char *escapeshellarg(char *str)
@@ -57,3 +60,29 @@ char *escapeshellarg(char *str)
 
 	return cmd;
 }
+
+uint32_t ip_read_conv(char *read)
+{
+	uint32_t ret = 0;
+	uint8_t bufptr = 0, i = 0;
+	char buf[4] = "\0\0\0";
+
+	while (((*read) != '\0') && ((*read) != '/')) {
+		buf[bufptr] = *read;
+		read++;
+		bufptr++;
+		if ((bufptr == 3) || ((*read) == '.')) {
+			bufptr = 0;
+			ret |= atoi(buf) << i;
+			i += 8;
+			read++; // skip dot
+		}
+	}
+
+	if (i < 32) {
+		ret |= atoi(buf) << i;
+	}
+
+	return ret;
+}
+

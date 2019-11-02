@@ -19,6 +19,8 @@ static const struct option server_options[] = {
 	{"threads",			required_argument,		0,		't'},
 	{"config",			required_argument,		0,		'c'},
 	{"config-file",		required_argument,		0,		'c'},
+	{"data-dir",		required_argument,		0,		'd'},
+	{"data_dir",		required_argument,		0,		'd'},
 	{"error-log",		required_argument,		0,		0x1},
 	{"verbose",			required_argument,		0,		0x2},
 	{"dev",				required_argument,		0,		0x3},
@@ -103,6 +105,7 @@ static bool server_argv_parser(char *appname, server_config *server, int argc, c
 	server->error_log_file = NULL;
 	server->config_file = NULL;
 	server->mtu = 1500;
+	server->data_dir = NULL;
 	server->inet4 = default_inet4;
 	server->inet4_broadcast = default_inet4_broadcast;
 	server->dev = default_dev_name;
@@ -132,6 +135,10 @@ static bool server_argv_parser(char *appname, server_config *server, int argc, c
 
 			case 'c':
 				server->config_file = optarg;
+				break;
+
+			case 'd':
+				server->data_dir = optarg;
 				break;
 
 			case 0x1:

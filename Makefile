@@ -7,13 +7,14 @@ SOURCE_DIR = src/
 ROOT_DEPDIR = .deps
 STD_FLAG = -std=c++17
 CONSTANTS = 
+INCLUDE = -Iinclude/
 
 ifeq (${RELEASE_MODE},1)
-	LINKER_FLAGS  = ${STD_FLAG} -Wall -fstack-protector-strong -s -Ofast ${CONSTANTS} -o
-	COMPILER_FLAGS = ${STD_FLAG} -Wall -fstack-protector-strong -Iinclude/ -s -Ofast ${CONSTANTS} -c -o
+	LINKER_FLAGS  = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -s -Ofast ${CONSTANTS} -o
+	COMPILER_FLAGS = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -s -Ofast ${CONSTANTS} -c -o
 else
-	LINKER_FLAGS  = ${STD_FLAG} -Wall -fstack-protector-strong -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -o
-	COMPILER_FLAGS = ${STD_FLAG} -Wall -fstack-protector-strong -Iinclude/ -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -c -o
+	LINKER_FLAGS  = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -o
+	COMPILER_FLAGS = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -c -o
 endif
 
 SOURCES  = $(shell find ${SOURCE_DIR} -name '*.c')
