@@ -40,6 +40,19 @@ static int tap_fd;
 static int net_fd;
 static bool teavpn_client_init_iface(client_config *config, struct teavpn_client_ip *ip);
 
+static int read_n(int fd, char *buf, int n) {
+	int nread, left = n;
+	while (left > 0) {
+		if ((nread = read(fd, buf, left)) == 0){
+			return 0;
+		} else {
+			left -= nread;
+			buf += nread;
+		}
+	}
+	return n;  
+}
+
 /**
  * @param client_config *config
  * @return uint8_t
@@ -193,6 +206,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 			}
 
 			packet.info.len = sizeof(packet.info) + nread;
+			printf("packet_len: %d\n", packet.info.len);
 
 			nwrite = write(net_fd, &packet, packet.info.len);
 			if (nwrite < 0) {
@@ -205,21 +219,13 @@ uint8_t teavpn_tcp_client(client_config *config)
 		if (FD_ISSET(net_fd, &rd_set)) {
 			net2tap++;
 
-			nread = read(net_fd, &packet, sizeof(packet));
+			nread = read(net_fd, &packet, sizeof(packet.info));
 			if (nread < 0) {
 				perror("Error read net_fd");
 				goto next_2;
 			}
 
-			while (nread < packet.info.len) {
-				nread += read(
-					net_fd,
-					((char *)&packet) + nread,
-					sizeof(packet)
-				);
-				printf("Extra reading... %ld : %d\n", nread, packet.info.len);
-				fflush(stdout);
-			}
+			read_n(net_fd, packet.data, packet.info.len);
 
 			// printf("packet type: %d\n",packet.info.type);
 			if (packet.info.type == TEAVPN_PACKET_DATA) {

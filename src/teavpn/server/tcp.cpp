@@ -52,6 +52,19 @@ static void *teavpn_thread_worker(uint64_t entry);
 static bool teavpn_server_socket_setup(int sock_fd);
 static bool teavpn_server_init_iface(server_config *config);
 
+static int read_n(int fd, char *buf, int n) {
+	int nread, left = n;
+	while (left > 0) {
+		if ((nread = read(fd, buf, left)) == 0){
+			return 0;
+		} else {
+			left -= nread;
+			buf += nread;
+		}
+	}
+	return n;  
+}
+
 /**
  * @param server_config *config
  * @return uint8_t
@@ -248,7 +261,8 @@ uint8_t teavpn_tcp_server(server_config *config)
 					packet = (struct teavpn_packet *)bufchan[bufchan_index].buffer;
 					packet->info.type = TEAVPN_PACKET_DATA;
 					bufchan[bufchan_index].ref_count = 0;
-					bufchan[bufchan_index].length = read(entries[i].fd, packet, sizeof(*packet));
+					bufchan[bufchan_index].length = read(entries[i].fd, packet, sizeof(packet->info));
+
 					if (bufchan[bufchan_index].length <= 0) {
 						entries[i].error++;
 						if (entries[i].error > 5) {
@@ -259,15 +273,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 						goto next_2;
 					}
 
-					while (bufchan[bufchan_index].length < packet->info.len) {
-						bufchan[bufchan_index].length += read(
-							entries[i].fd,
-							((char *)packet) + bufchan[bufchan_index].length,
-							sizeof(*packet)
-						);
-						printf("Extra reading %ld / %d...\n", bufchan[bufchan_index].length, packet->info.len);
-						fflush(stdout);
-					}
+					read_n(entries[i].fd, packet->data, packet->info.len);
 
 					nwrite = write(tap_fd, packet->data, bufchan[bufchan_index].length - sizeof(packet->info));
 					if (nwrite < 0) {
