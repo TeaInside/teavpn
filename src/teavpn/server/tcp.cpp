@@ -114,7 +114,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 	debug_log(0, "Successfully created a new interface \"%s\".\n", config->dev);
 
 	// Initialize TUN/TAP interface.
-	if (teavpn_server_init_iface(config)) {
+	if (!teavpn_server_init_iface(config)) {
 		printf("Cannot init interface\n");
 		close(tap_fd);
 		return 1;
@@ -543,12 +543,12 @@ static bool teavpn_server_init_iface(server_config *config)
 	free(escaped_inet4);
 	free(escaped_inet4_broadcast);
 
-	debug_log(1, "Executing: %s\n", cmd1);
+	debug_log(0, "Executing: %s\n", cmd1);
 	if (system(cmd1)) {
 		return false;
 	}
 
-	debug_log(1, "Executing: %s\n", cmd2);
+	debug_log(0, "Executing: %s\n", cmd2);
 	if (system(cmd2)) {
 		return false;
 	}
