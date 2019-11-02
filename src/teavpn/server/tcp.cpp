@@ -428,7 +428,7 @@ static void *teavpn_accept_connection(void *ptr)
 
 				entries[entry_count].connected = true;
 				entry_count++;
-				write(pipe_fd[1], "aaaaaaaaaa", 10); // Interupt select.
+				write(pipe_fd[1], "aaaaaaaaaa", 10); // Interrupt select.
 			} else {
 				packet.info.type = TEAVPN_PACKET_RST;
 				nwrite = write(client_fd, &packet, sizeof(packet.info));
