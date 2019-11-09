@@ -319,7 +319,11 @@ static void *teavpn_thread_worker(uint64_t entry)
 		entry_index = entry & 0xffff;
 
 	entries[entry_index].send_counter++;
-	nwrite = write(entries[entry_index].fd, bufchan[bufchan_index].buffer, bufchan[bufchan_index].length);
+	nwrite = write(
+		entries[entry_index].fd,
+		((struct teavpn_packet *)(bufchan[bufchan_index].buffer))->data,
+		((struct teavpn_packet *)(bufchan[bufchan_index].buffer))->length
+	);
 	if (nwrite < 0) {
 		entries[entry_index].error++;
 		perror("Error write to client");
@@ -509,6 +513,7 @@ static int16_t get_buffer_channel_index()
 	}
 
 	if (sleep_state) {
+		debug_log("Got buffer channels sleep state\n");
 		sleep(1);
 		buf_chan_state--;
 		if (buf_chan_state <= 2) {

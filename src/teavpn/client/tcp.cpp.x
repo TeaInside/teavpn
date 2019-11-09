@@ -225,6 +225,10 @@ uint8_t teavpn_tcp_client(client_config *config)
 				goto next_2;
 			}
 
+			// if (nread < packet.info.len) {
+			// 	nread += read(net_fd, ((char *)&packet) + nread, TEAVPN_PACKET_BUFFER);
+			// }
+
 			// read_n(net_fd, packet.data, packet.info.len);
 
 			// printf("packet type: %d\n",packet.info.type);
