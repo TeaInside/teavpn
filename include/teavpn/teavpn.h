@@ -72,23 +72,17 @@ struct teavpn_client_ip {
 	char inet4_route[sizeof("xxx.xxx.xxx.xxx")];
 };
 
-#define TEAVPN_PACKET_BUFFER 5000
+#define TEAVPN_PACKET_BUFFER 1500
 
 /**
  * TeaVPN Packet.
  */
 enum teavpn_packet_type {
 	TEAVPN_PACKET_AUTH = (1 << 0),
-	TEAVPN_PACKET_ACK = (1 << 1),
-	TEAVPN_PACKET_RST = (1 << 2),
-	TEAVPN_PACKET_DATA = (1 << 3)
-};
-
-struct teavpn_packet_auth {
-	uint8_t username_len;
-	uint8_t password_len;
-	char username[64];
-	char password[255];
+	TEAVPN_PACKET_DATA = (1 << 1),
+	TEAVPN_PACKET_ACK = (1 << 2),
+	TEAVPN_PACKET_NAK = (1 << 3),
+	TEAVPN_PACKET_RST = (1 << 4)
 };
 
 struct packet_info {
@@ -97,12 +91,20 @@ struct packet_info {
 	uint64_t seq;
 };
 
-struct teavpn_packet {
-	struct packet_info info;
-	char data[TEAVPN_PACKET_BUFFER];
+struct teavpn_auth {
+	uint8_t username_len;
+	uint8_t password_len;
+	char username[255];
+	char password[255];
 };
 
-#define TEAVPN_PACKET_BUFFER_CONTAINER_SIZE (sizeof(struct teavpn_packet))
+typedef struct _teavpn_packet {
+	struct packet_info info;
+	union {
+		struct teavpn_auth auth;
+		char data[TEAVPN_PACKET_BUFFER];
+	} data;
+} teavpn_packet;
 
 int tun_alloc(char *dev, int flags);
 void debug_log(uint8_t vlevel, const char *msg, ...);

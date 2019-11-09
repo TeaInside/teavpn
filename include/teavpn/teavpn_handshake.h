@@ -9,6 +9,7 @@
 #define __teavpn__teavpn_handshake_h
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>

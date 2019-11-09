@@ -1,11 +1,11 @@
 
-COMPILER = g++
-LINKER = g++
+COMPILER = gcc
+LINKER = gcc
 BIN_FILE = teavpn
 LIBS = -lpthread
 SOURCE_DIR = src/
 ROOT_DEPDIR = .deps
-STD_FLAG = -std=c++17
+STD_FLAG =
 CONSTANTS = 
 INCLUDE = -Iinclude/
 

@@ -61,7 +61,11 @@ char *escapeshellarg(char *str)
 	return cmd;
 }
 
-uint32_t ip_read_conv(char *read)
+/**
+ * @param const char *read
+ * @return uint32_t
+ */
+uint32_t ip_read_conv(const char *read)
 {
 	uint32_t ret = 0;
 	uint8_t bufptr = 0, i = 0;
@@ -85,4 +89,3 @@ uint32_t ip_read_conv(char *read)
 
 	return ret;
 }
-

@@ -10,6 +10,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include <teavpn/cli_arg.h>
 
@@ -205,7 +206,7 @@ static bool client_argv_parser(char *appname, client_config *client, int argc, c
 	while (true) {
 
 		option_index = 0;
-		c = getopt_long(argc, argv, "h:p:vc:", server_options, &option_index);
+		c = getopt_long(argc, argv, "h:p:vc:", client_options, &option_index);
 		if (c == -1) break;
 
 		switch (c) {

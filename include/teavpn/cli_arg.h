@@ -8,6 +8,7 @@
 #ifndef __teavpn__cli_arg_h
 #define __teavpn__cli_arg_h
 
+#include <stdbool.h>
 #include <teavpn/teavpn.h>
 
 bool argv_parser(teavpn_config *config, int argc, char **argv, char **envp);

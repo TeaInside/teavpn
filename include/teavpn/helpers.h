@@ -13,6 +13,6 @@
 #include <stdlib.h>
 
 char *escapeshellarg(char *str);
-uint32_t ip_read_conv(char *read);
+uint32_t ip_read_conv(const char *read);
 
 #endif

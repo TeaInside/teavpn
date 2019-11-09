@@ -14,18 +14,26 @@
 #include <teavpn/teavpn.h>
 #include <teavpn/teavpn_handshake.h>
 
-#define BUFCHAN_ALLOC 24
-
 uint8_t teavpn_udp_server(server_config *config);
 uint8_t teavpn_tcp_server(server_config *config);
+
+struct connection_entry {
+	bool connected;
+	uint8_t error;
+	int fd;
+	uint32_t priv_ip;
+	uint64_t send_counter;
+	uint64_t recv_counter;
+	struct sockaddr_in info;
+};
 
 struct buffer_channel {	
 	ssize_t length;
 	uint16_t ref_count;
-	char buffer[sizeof(teavpn_packet)];
+	char *bufptr;
+	char buffer[TEAVPN_PACKET_BUFFER_CONTAINER_SIZE];
 };
 
-#define BUFPTR(X, Y) ((Y)&(X.buffer[0]))
-#define BUFPPTR(X, Y) ((Y)&(X->buffer[0]))
+FILE *teavpn_auth_check(server_config *config, struct teavpn_packet_auth *auth);
 
 #endif
