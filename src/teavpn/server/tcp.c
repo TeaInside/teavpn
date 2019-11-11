@@ -210,6 +210,13 @@ static void *accept_worker_thread()
 				printf("Password: \"%s\"\n\n", packet.data.auth.password);
 				fflush(stdout);
 				#endif
+
+				// Prepare packet.
+				packet.info.type = TEAVPN_PACKET_SIG;
+				packet.info.len = sizeof(packet.data.sig);
+				packet.info.seq = 0;
+				packet.data.sig.sig = TEAVPN_SIG_AUTH_REJECT;
+				nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
 			}
 		}
 

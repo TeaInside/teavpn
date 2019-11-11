@@ -40,6 +40,23 @@ static int net_fd;
 static bool teavpn_tcp_client_init_iface(client_config *config);
 static bool teavpn_tcp_client_init(char *config_buffer, client_config *config);
 
+static void print_err_sig(uint8_t sig)
+{
+	switch (sig) {
+		case TEAVPN_SIG_AUTH_REJECT:
+			printf("Invalid username or password\n");
+			break;
+		case TEAVPN_SIG_UNKNOWN:
+			printf("Invalid error (code: TEAVPN_SIG_AUTH_UNKNOWN)\n");
+			break;
+		case TEAVPN_SIG_DROP:
+			printf("Connection dropped!\n");
+			break;
+		case TEAVPN_SIG_AUTH_OK:
+		default:
+			break;
+	}
+}
 
 uint8_t teavpn_tcp_client(client_config *config)
 {
@@ -89,14 +106,26 @@ uint8_t teavpn_tcp_client(client_config *config)
 		goto close;
 	}
 
+	nread = read(net_fd, &packet, sizeof(packet));
+	if (packet.info.type == TEAVPN_PACKET_SIG) {
+		if (packet.data.sig.sig == TEAVPN_SIG_AUTH_OK) {
+			printf("Auth OK\n");
+		} else {
+			print_err_sig(packet.data.sig.sig);
+			goto close;
+		}
+	}
+
+	
+
 	close:
+	fflush(stdout);
 	close(net_fd);
 	close(tap_fd);
 	return 1;
 
 	#undef server_addr
 }
-
 
 static bool teavpn_tcp_client_init(char *config_buffer, client_config *config)
 {

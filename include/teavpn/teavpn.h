@@ -115,8 +115,6 @@ struct teavpn_packet_data {
 
 struct teavpn_packet_sig {
 	enum teavpn_sig_type sig;
-	uint16_t err_msg_len;
-	char err_msg[1024];
 };
 
 typedef struct _teavpn_packet {
