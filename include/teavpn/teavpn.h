@@ -11,10 +11,6 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 
-#ifndef OFFSETOF
-#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT)) 
-#endif
-
 typedef struct _server_config {
 	char *bind_addr;
 	char *config_file;
@@ -124,6 +120,14 @@ typedef struct _teavpn_packet {
 		char data[TEAVPN_PACKET_BUFFER - sizeof(uint16_t)];
 	} data;
 } teavpn_packet;
+
+#ifndef OFFSETOF
+#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT)) 
+#endif
+
+#ifndef TEAVPN_PACK
+#define TEAVPN_PACK(X) (OFFSETOF(teavpn_packet, data) + X)
+#endif
 
 int tun_alloc(char *dev, int flags);
 void debug_log(uint8_t vlevel, const char *msg, ...);

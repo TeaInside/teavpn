@@ -28,9 +28,11 @@ void debug_log(uint8_t vlevel, const char *msg, ...)
 
 		time(&rawtime);
 		timeinfo = localtime(&rawtime);
+		char *time = asctime(timeinfo);
+		time[24] = '\0';
 
 		va_start(argp, msg);
-		fprintf(stdout, "[%s]: ", asctime(timeinfo));
+		fprintf(stdout, "[%s]: ", time);
 		vfprintf(stdout, msg, argp);
 		fprintf(stdout, "\n");
 		va_end(argp);
