@@ -402,10 +402,6 @@ uint8_t teavpn_tcp_server(server_config *config)
 			}
 		}
 
-		do {
-			bufchan_index = get_bufchan_index();
-		} while (bufchan_index == -1);
-
 		fd_ret = select(max_fd + 1, &rd_set, NULL, NULL, NULL);
 
 		// Got interrupt signal.
@@ -421,6 +417,10 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 		// Read from tap_fd.
 		if (FD_ISSET(tap_fd, &rd_set)) {
+			do {
+				bufchan_index = get_bufchan_index();
+			} while (bufchan_index == -1);
+
 			nread = read(tap_fd, bufchan[bufchan_index].buffer, TEAVPN_TAP_READ_SIZE);
 			if (nread < 0) {
 				perror("Error read from tap_fd");
