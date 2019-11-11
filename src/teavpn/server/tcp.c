@@ -479,9 +479,8 @@ uint8_t teavpn_tcp_server(server_config *config)
 						connections[i].error++;
 						perror("Error read from connection fd");
 						if (connections[i].error > 15) {
-							connections[i].connected = false;
 							FD_CLR(connections[i].fd, &rd_set);
-							connections[i].fd = -1;
+							connection_reset(i);
 						}
 						continue;
 					}
@@ -491,6 +490,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 				} else {
 					FD_CLR(connections[i].fd, &rd_set);
+					connection_reset(i);
 				}
 			}
 		}
