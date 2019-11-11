@@ -231,7 +231,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 		}
 
 		/**
-		 * Block main process until there is one or more ready fd.		 
+		 * Block main process until there is one or more ready fd.
 		 * Read `man 2 select_tut` for details.
 		 */
 		fd_ret = select(max_fd + 1, &rd_set, NULL, NULL, NULL);
