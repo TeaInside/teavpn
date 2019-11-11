@@ -88,7 +88,6 @@ uint8_t teavpn_tcp_client(client_config *config)
 	// Prepare auth packet.
 	packet.info.type = TEAVPN_PACKET_AUTH;
 	packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(struct teavpn_packet_auth);
-	packet.info.seq = ++seq; // 1
 	packet.data.auth.username_len = config->username_len;
 	packet.data.auth.password_len = config->password_len;
 	strcpy(packet.data.auth.username, config->username);
@@ -100,7 +99,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 	fflush(stdout);
 	#endif
 
-	packet.info.seq = ++seq; // 2
+	packet.info.seq = ++seq; // 1
 	nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.auth));
 	debug_log(3, "Auth data sent (%ld bytes)\n", nwrite);
 	if (nwrite < 0) {
@@ -111,7 +110,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 	nread = read(net_fd, &packet, sizeof(packet));
 	if (packet.info.type == TEAVPN_PACKET_SIG) {
 
-		seq++; // Must be 3
+		seq++; // Must be 2
 		if (packet.info.seq != seq) {
 			printf("Invalid seq number (server_seq: %ld) (client_seq: %ld)\n", packet.info.seq, seq);
 			goto close;
@@ -128,7 +127,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 		goto close;
 	}
 
-	packet.info.seq = ++seq; // 4
+	packet.info.seq = ++seq; // 3
 	write(net_fd, &packet, OFFSETOF(teavpn_packet, data));
 
 	nread = read(net_fd, &packet, sizeof(packet));
@@ -139,7 +138,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 		fflush(stdout);
 		#endif
 
-		seq++; // Must be 5
+		seq++; // Must be 4
 		if (packet.info.seq != seq) {
 			printf("Invalid seq number (server_seq: %ld) (client_seq: %ld)\n", packet.info.seq, seq);
 			goto close;
@@ -208,7 +207,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 
 				seq++;
 				debug_log(3, "[%ld][%ld] Read from server %ld bytes (%s)\n",
-					seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid seq");
+					seq, packet.info.seq, nread, (seq == packet.info.seq) ? "match" : "invalid seq");
 
 				nwrite = write(tap_fd, packet.data.data, packet.info.len - OFFSETOF(teavpn_packet, data));
 				if (nwrite < 0) {

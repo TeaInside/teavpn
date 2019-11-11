@@ -42,6 +42,7 @@ struct connection_entry {
 	uint8_t error;
 	uint64_t seq;
 	uint32_t priv_ip;
+	pthread_mutex_t mutex;
 	struct sockaddr_in addr;
 };
 

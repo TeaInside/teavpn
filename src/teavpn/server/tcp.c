@@ -65,6 +65,8 @@ static void connection_entry_zero(int16_t i)
 	connections[i].seq = 0;
 	connections[i].priv_ip = 0;
 	memset(&(connections[i].addr), 0, sizeof(connections[i].addr));
+	memset(&(connections[i].mutex), 0, sizeof(connections[i].mutex));
+	pthread_mutex_init(&(connections[i].mutex));
 }
 
 
@@ -133,6 +135,7 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 		for (i = 0; i < QUEUE_AMOUNT; ++i) {
 			if (queues[i].used && (!queues[i].taken)) {
 				pthread_mutex_lock(&global_mutex_a);
+				pthread_mutex_lock(&(connections[queues[i].conn_index].mutex));
 				queues[i].taken = true;
 				has_job = true;
 				pthread_mutex_unlock(&global_mutex_a);
@@ -143,13 +146,16 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 		if (has_job) {
 			#define packet ((teavpn_packet *)(bufchan->buffer))
 
-			packet->info.seq = connections[queues[i].conn_index].seq;
+
+			packet->info.seq = ++(connections[queues[i].conn_index].seq);
 
 			nwrite = write(
 				connections[queues[i].conn_index].fd,
 				packet,
 				packet->info.len
 			);
+
+			debug_log(3, "[%ld] Write to client %ld bytes\n", packet->info.seq, nwrite);
 
 			if (nwrite == 0) {
 				close(connections[queues[i].conn_index].fd);
@@ -163,6 +169,7 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 				perror("Error write to client");
 			}
 
+			pthread_mutex_unlock(&(connections[queues[i].conn_index].mutex));
 			pthread_mutex_lock(&global_mutex_b);
 			queue_amount--;
 			queues[i].bufchan->ref_count--;
@@ -273,6 +280,7 @@ static bool validate_auth(struct teavpn_packet_auth *auth)
 static void *teavpn_tcp_accept_worker_thread(server_config *config)
 {
 	FILE *h;
+	uint64_t seq;
 	int client_fd;
 	char *remote_addr;
 	int16_t conn_index;
@@ -289,6 +297,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		conn_index = get_free_connection_index();
 
+		seq = 1;
 		client_fd = accept(net_fd, (struct sockaddr *)&(client_addr), &rlen);
 		if (client_fd < 0) {
 			perror("Error accept");
@@ -320,8 +329,16 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 				goto next_d;
 			}
 
+			// Must be 1
+			if (packet.info.seq != seq) {
+				printf("Invalid seq number (client_seq: %ld) (server_seq: %ld)\n", packet.info.seq, seq);
+				fflush(stdout);
+				close(client_fd);
+				goto next_d;
+			}
+
 			// Got auth packet.
-			if ((packet.info.type == TEAVPN_PACKET_AUTH) && (packet.info.seq == 0)) {
+			if (packet.info.type == TEAVPN_PACKET_AUTH) {
 				if (!validate_auth(&(packet.data.auth))) {
 					close(client_fd);
 				}
@@ -337,7 +354,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 				h = teavpn_auth_check(config, &(packet.data.auth));
 				if (h) {
-					char buffer[64];
+					char buffer[64 + OFFSETOF(teavpn_packet, data)];
 					size_t len, sp = 0;
 					const uint8_t sig = 0xff;
 
@@ -374,14 +391,13 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 					connections[conn_index].fd = client_fd;
 					connections[conn_index].priv_ip = ip_read_conv(buffer);
 					connections[conn_index].error = 0;
-					connections[conn_index].seq = 1;
 					connections[conn_index].addr = client_addr;
 
 					// Prepare packet.
 					packet.info.type = TEAVPN_PACKET_SIG;
 					packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig);
-					packet.info.seq = 0;
 					packet.data.sig.sig = TEAVPN_SIG_AUTH_OK;
+					packet.info.seq = ++seq; // 2
 					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
 					fclose(h);
 					if (nwrite < 0) {
@@ -401,12 +417,17 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 					// fflush(stdout);
 					#endif
 
-					nread = read(client_fd, buffer, 64);
+					++seq; // 3
+					nread = read(client_fd, buffer, OFFSETOF(teavpn_packet, data));
+					if (seq != ((teavpn_packet *)buffer)->info.seq) {
+						printf("Invalid seq number (client_seq: %ld) (server_seq: %ld)\n",
+							((teavpn_packet *)buffer)->info.seq, seq);
+					}
 
 					// Prepare packet.
 					packet.info.type = TEAVPN_PACKET_CONF;
 					packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig);
-
+					packet.info.seq = ++seq; // 4
 					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.conf));
 					if (nwrite < 0) {
 						close(client_fd);
@@ -416,6 +437,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 					}
 
 					connections[conn_index].connected = true;
+					connections[conn_index].seq = seq;
 					conn_count++;
 					write(m_pipe_fd[1], &sig, sizeof(sig));
 				} else {
@@ -431,6 +453,8 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 						goto next_d;
 					}
 				}
+			} else {
+				close(client_fd);
 			}
 		}
 
@@ -616,6 +640,12 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 					if (packet->info.type == TEAVPN_PACKET_DATA) {
 
+						connections[i].seq++;
+						debug_log(3, "[%ld][%ld] Read from client %ld bytes (%s)\n",
+							connections[i].seq, packet->info.seq, nread,
+							(connections[i].seq == packet->info.seq) ? "match" : "invalid seq");
+
+
 						net2tap++;
 						nwrite = write(tap_fd, &(packet->data), packet->info.len - OFFSETOF(teavpn_packet, data));
 
@@ -666,10 +696,7 @@ static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config
 
 	// Initialize connection entry value.
 	for (register uint16_t i = 0; i < CONNECTION_ALLOC; ++i) {
-		connections[i].fd = -1;
-		connections[i].connected = false;
-		connections[i].error = 0;
-		connections[i].seq = 0;
+		connection_entry_zero(i);
 	}
 
 	if (config->config_file != NULL) {
