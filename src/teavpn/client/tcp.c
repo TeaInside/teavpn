@@ -88,8 +88,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 	// Prepare auth packet.
 	packet.info.type = TEAVPN_PACKET_AUTH;
 	packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(struct teavpn_packet_auth);
-	packet.info.seq = 0;
-	seq++;
+	packet.info.seq = ++seq; // 1
 	packet.data.auth.username_len = config->username_len;
 	packet.data.auth.password_len = config->password_len;
 	strcpy(packet.data.auth.username, config->username);
@@ -101,6 +100,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 	fflush(stdout);
 	#endif
 
+	packet.info.seq = ++seq; // 2
 	nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.auth));
 	if (nwrite < 0) {
 		perror("Error write");
@@ -109,6 +109,13 @@ uint8_t teavpn_tcp_client(client_config *config)
 
 	nread = read(net_fd, &packet, sizeof(packet));
 	if (packet.info.type == TEAVPN_PACKET_SIG) {
+
+		seq++; // Must be 3
+		if (packet.info.seq != seq) {
+			printf("Invalid seq number (server_seq: %ld) (client_seq: %ld)\n", packet.info.seq, seq);
+			goto close;
+		}
+
 		if (packet.data.sig.sig == TEAVPN_SIG_AUTH_OK) {
 			printf("Auth OK\n");
 		} else {
@@ -117,7 +124,8 @@ uint8_t teavpn_tcp_client(client_config *config)
 		}
 	}
 
-	write(net_fd, &packet, 10);
+	packet.info.seq = ++seq; // 4
+	write(net_fd, &packet, OFFSETOF(teavpn_packet, data));
 
 	nread = read(net_fd, &packet, sizeof(packet));
 	if (packet.info.type == TEAVPN_PACKET_CONF) {
@@ -126,6 +134,13 @@ uint8_t teavpn_tcp_client(client_config *config)
 		printf("inet4_bc: \"%s\"\n", packet.data.conf.inet4_broadcast);
 		fflush(stdout);
 		#endif
+
+		seq++; // Must be 5
+		if (packet.info.seq != seq) {
+			printf("Invalid seq number (server_seq: %ld) (client_seq: %ld)\n", packet.info.seq, seq);
+			goto close;
+		}
+
 	} else {
 		printf("Invalid packet\n");
 		fflush(stdout);
@@ -164,16 +179,16 @@ uint8_t teavpn_tcp_client(client_config *config)
 				goto next_1;
 			}
 
-			debug_log(3, "Read from tap_fd %ld bytes\n", nread);
-
-			packet.info.seq = seq;
+			packet.info.seq = ++seq;
 			packet.info.len = OFFSETOF(teavpn_packet, data) + nread;
 			nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + nread);
+			debug_log(3, "[%ld] Write to server %ld bytes\n", packet.info.seq, nwrite);
+
 			if (nwrite < 0) {
+				seq--;
 				perror("Error write to net_fd");
 				goto next_1;
 			}
-			debug_log(3, "[%ld] Write to server %ld bytes\n", seq++, nwrite);
 		}
 
 		next_1:
@@ -186,9 +201,12 @@ uint8_t teavpn_tcp_client(client_config *config)
 			}
 
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
-				debug_log(3, "[%ld][%ld] Read packet length %ld bytes\n", seq, packet.info.seq, packet.info.len);
-				debug_log(3, "[%ld] Write to tap_fd %ld bytes\n", nread);
-				nwrite = write(tap_fd, packet.data.data, packet.info.len);
+
+				seq++;
+				debug_log(3, "[%ld][%ld] Read from server %ld bytes (%s)\n",
+					seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid seq");
+
+				nwrite = write(tap_fd, packet.data.data, packet.info.len - OFFSETOF(teavpn_packet, data));
 				if (nwrite < 0) {
 					perror("Error write to tap_fd");
 					continue;

@@ -396,9 +396,9 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 					strcpy(packet.data.conf.inet4_broadcast, &(buffer[sp+1]));
 
 					#ifdef TEAVPN_DEBUG
-					printf("inet4: \"%s\"\n", packet.data.conf.inet4);
-					printf("inet4_bc: \"%s\"\n", packet.data.conf.inet4_broadcast);
-					fflush(stdout);
+					// printf("inet4: \"%s\"\n", packet.data.conf.inet4);
+					// printf("inet4_bc: \"%s\"\n", packet.data.conf.inet4_broadcast);
+					// fflush(stdout);
 					#endif
 
 					nread = read(client_fd, buffer, 64);
