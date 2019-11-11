@@ -48,6 +48,15 @@ static bool teavpn_tcp_server_socket_setup(int sock_fd);
 static bool teavpn_tcp_server_init_iface(server_config *config);
 static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config);
 
+static void connection_reset(int16_t i)
+{
+	connections[i].fd = -1;
+	connections[i].connected = false;
+	connections[i].error = 0;
+	connections[i].seq = 0;
+	connections[i].priv_ip = 0;
+	memset(&(connections[i].addr), 0, sizeof(connections[i].addr));
+}
 
 /**
  * Get non-busy connection entry.
@@ -235,6 +244,7 @@ static void *accept_worker_thread(server_config *config)
 					if (sp > sizeof("xxx.xxx.xxx.xxx/xx")) {
 						fclose(h);
 						close(client_fd);
+						connection_reset(conn_index);
 						debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
 						goto next_d;
 					}
@@ -265,17 +275,40 @@ static void *accept_worker_thread(server_config *config)
 					packet.info.seq = 0;
 					packet.data.sig.sig = TEAVPN_SIG_AUTH_OK;
 					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
-					if (nwrite < 0) {
-						perror("Error write to client after accept");
-						close(client_fd);
-						goto next_d;
-						fclose(h);
-					}
 					fclose(h);
+					if (nwrite < 0) {
+						close(client_fd);
+						connection_reset(conn_index);
+						perror("Error write to client after accept");
+						goto next_d;
+					}
+
+					memcpy(packet.data.conf.inet4, buffer, sp);
+					packet.data.conf.inet4[sp] = '\0';
+					strcpy(packet.data.conf.inet4_broadcast, &(buffer[sp+1]));
+
+					#ifdef TEAVPN_DEBUG
+					printf("inet4: \"%s\"\n", packet.data.conf.inet4);
+					printf("inet4_bc: \"%s\"\n", packet.data.conf.inet4_broadcast);
+					fflush(stdout);
+					#endif
+
+					nread = read(client_fd, buffer, 64);
+
+					// Prepare packet.
+					packet.info.type = TEAVPN_PACKET_CONF;
+					packet.info.len = sizeof(packet.data.sig);
+
+					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.conf));
+					if (nwrite < 0) {
+						close(client_fd);
+						connection_reset(conn_index);
+						perror("Error write to client after accept");
+						goto next_d;
+					}
 
 					connections[conn_index].connected = true;
 					conn_count++;
-
 					write(m_pipe_fd[1], &sig, sizeof(sig));
 				} else {
 					// Prepare packet.
@@ -352,6 +385,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 		(void *)config
 	);
 	pthread_setname_np(accept_worker, "accept-worker");
+	pthread_detach(accept_worker);
 
 	debug_log(0, "Listening on %s:%d...\n", config->bind_addr, config->bind_port);
 
@@ -423,7 +457,16 @@ uint8_t teavpn_tcp_server(server_config *config)
 						bufchan_index = get_bufchan_index();
 					} while (bufchan_index == -1);
 
+
 					nread = read(connections[i].fd, bufchan[bufchan_index].buffer, TEAVPN_PACKET_BUFFER);
+
+					// Connection closed by client.
+					if (nread == 0) {
+						close(connections[i].fd);
+						connection_reset(i);
+						printf("Connection closed.\n");
+						continue;
+					}
 
 					if (nread < 0) {
 						connections[i].error++;

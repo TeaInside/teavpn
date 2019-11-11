@@ -37,8 +37,8 @@ extern uint8_t verbose_level;
 static int tap_fd;
 static int net_fd;
 
-static bool teavpn_tcp_client_init_iface(client_config *config);
 static bool teavpn_tcp_client_init(char *config_buffer, client_config *config);
+static bool teavpn_client_init_iface(client_config *config, struct teavpn_client_ip *ip);
 
 static void print_err_sig(uint8_t sig)
 {
@@ -116,7 +116,74 @@ uint8_t teavpn_tcp_client(client_config *config)
 		}
 	}
 
-	
+	write(net_fd, &packet, 10);
+
+	nread = read(net_fd, &packet, sizeof(packet));
+	if (packet.info.type == TEAVPN_PACKET_CONF) {
+		#ifdef TEAVPN_DEBUG
+		printf("inet4: \"%s\"\n", packet.data.conf.inet4);
+		printf("inet4_bc: \"%s\"\n", packet.data.conf.inet4_broadcast);
+		fflush(stdout);
+		#endif
+	} else {
+		printf("Invalid packet\n");
+		fflush(stdout);
+		goto close;
+	}
+
+	if (!teavpn_client_init_iface(config, &(packet.data.conf))) {
+		printf("Cannot init interface\n");
+		close(tap_fd);
+		return 1;
+	}
+
+	packet.info.type = TEAVPN_PACKET_DATA;
+	max_fd = (tap_fd > net_fd) ? tap_fd : net_fd;
+
+	while (true) {
+		FD_ZERO(&rd_set);
+		FD_SET(tap_fd, &rd_set);
+		FD_SET(net_fd, &rd_set);
+
+		fd_ret = select(max_fd + 1, &rd_set, NULL, NULL, NULL);
+
+		if ((fd_ret < 0) && (errno == EINTR)) {
+			continue;
+		}
+
+		if (fd_ret < 0) {
+			perror("select()");
+			continue;
+		}
+
+		if (FD_ISSET(tap_fd, &rd_set)) {
+			nread = read(tap_fd, &(packet.data.data), TEAVPN_TAP_READ_SIZE);
+			if (nread < 0) {
+				perror("Error read from tap_fd");
+				goto next_1;
+			}
+
+			packet.info.len = nread;
+			nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + nread);
+			if (nwrite < 0) {
+				perror("Error write to net_fd");
+				goto next_1;
+			}
+		}
+
+		next_1:
+		if (FD_ISSET(net_fd, &rd_set)) {
+			nread = read(net_fd, &packet, sizeof(packet));
+			if (nread < 0) {
+				perror("Error read from net_fd");
+				goto next_1;	
+			}
+
+			if (packet.info.type == TEAVPN_PACKET_DATA) {
+				
+			}
+		}
+	}
 
 	close:
 	fflush(stdout);
@@ -188,7 +255,97 @@ static bool teavpn_tcp_client_init(char *config_buffer, client_config *config)
 }
 
 
-static bool teavpn_tcp_client_init_iface(client_config *config)
+/**
+ * @param client_config *config
+ * @param struct teavpn_client_ip *ip
+ * @return void
+ */
+static bool teavpn_client_init_iface(client_config *config, struct teavpn_client_ip *ip)
 {
-	return true;
+	bool ret;
+	char cmd[100],
+		data[100],
+		*escaped_dev,
+		*escaped_inet4,
+		*escaped_inet4_broadcast,
+		*p, *q;
+	FILE *fp = NULL;
+
+	escaped_dev = escapeshellarg(config->dev);
+	escaped_inet4 = escapeshellarg(ip->inet4);
+	escaped_inet4_broadcast = escapeshellarg(ip->inet4_broadcast);
+
+	/**
+	 * Set interface up.
+	 */
+	sprintf(
+		cmd,
+		"/sbin/ip link set dev %s up mtu %d",
+		escaped_dev,
+		config->mtu
+	);
+	debug_log(1, "Executing: %s\n", cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
+
+
+	/**
+	 * Assign private IP.
+	 */
+	sprintf(
+		cmd,
+		"/sbin/ip addr add dev %s %s broadcast %s",
+		escaped_dev,
+		escaped_inet4,
+		escaped_inet4_broadcast
+	);
+	debug_log(1, "Executing: %s\n", cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
+
+	/**
+	 * Get server route data.
+	 */
+	sprintf(cmd, "/sbin/ip route get %s", config->server_ip);
+	debug_log(1, "Executing: %s\n", cmd);
+	fp = popen(cmd, "r");
+	fgets(data, 99, fp);
+	pclose(fp);
+
+	p = strstr(data, "via");
+	if (p == NULL) {
+		printf("Cannot get server route via\n");
+		// ret = false;
+		// goto ret;
+	} else {
+		while ((*p) != ' ') p++;
+		p++;
+		q = p;
+		while ((*q) != ' ') q++;
+		*q = '\0';
+	}
+
+
+	// sprintf(cmd, "/sbin/ip route add %s/32 via %s", config->server_ip, p);
+	// debug_log(1, "Executing: %s\n", cmd);
+	// system(cmd);
+
+	sprintf(cmd, "/sbin/ip route add 0.0.0.0/1 via %s", "5.5.0.1");
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
+
+	sprintf(cmd, "/sbin/ip route add 128.0.0.0/1 via %s", "5.5.0.1");
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
+
+	ret = true;
+ret:
+	free(escaped_dev);
+	free(escaped_inet4);
+	free(escaped_inet4_broadcast);
+	return ret;
 }

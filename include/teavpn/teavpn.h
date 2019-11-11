@@ -85,14 +85,16 @@ struct teavpn_client_ip {
 enum teavpn_packet_type {
 	TEAVPN_PACKET_AUTH = (1 << 0),
 	TEAVPN_PACKET_DATA = (1 << 1),
-	TEAVPN_PACKET_SIG = (1 << 2)
+	TEAVPN_PACKET_SIG = (1 << 2),
+	TEAVPN_PACKET_CONF = (1 << 3)
 };
 
 enum teavpn_sig_type {
 	TEAVPN_SIG_AUTH_REJECT = (1 << 0),
 	TEAVPN_SIG_AUTH_OK = (1 << 1),
 	TEAVPN_SIG_UNKNOWN = (1 << 2),
-	TEAVPN_SIG_DROP = (1 << 3)
+	TEAVPN_SIG_DROP = (1 << 3),
+	TEAVPN_SIG_ACK = (1 << 4)
 };
 
 struct packet_info {
@@ -108,11 +110,6 @@ struct teavpn_packet_auth {
 	char password[256];
 };
 
-struct teavpn_packet_data {
-	uint16_t len;
-	char data[TEAVPN_PACKET_BUFFER - sizeof(uint16_t)];
-};
-
 struct teavpn_packet_sig {
 	enum teavpn_sig_type sig;
 };
@@ -120,10 +117,11 @@ struct teavpn_packet_sig {
 typedef struct _teavpn_packet {
 	struct packet_info info;
 	union {
-		struct teavpn_packet_auth auth;
-		struct teavpn_packet_data data;
-		struct teavpn_packet_sig sig;
 		char any[4096];
+		struct teavpn_client_ip conf;
+		struct teavpn_packet_sig sig;
+		struct teavpn_packet_auth auth;
+		char data[TEAVPN_PACKET_BUFFER - sizeof(uint16_t)];
 	} data;
 } teavpn_packet;
 
