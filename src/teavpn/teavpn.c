@@ -19,26 +19,26 @@
 
 uint8_t verbose_level = 0;
 
-void debug_log(uint8_t vlevel, const char *msg, ...)
+uint8_t __internal_debug_log(const char *msg, ...)
 {
-	if (vlevel <= verbose_level) {
-		va_list argp;
-		time_t rawtime;
-		struct tm *timeinfo;
+	va_list argp;
+	time_t rawtime;
+	struct tm *timeinfo;
 
-		time(&rawtime);
-		timeinfo = localtime(&rawtime);
-		char *time = asctime(timeinfo);
-		time[24] = '\0';
+	time(&rawtime);
+	timeinfo = localtime(&rawtime);
+	char *time = asctime(timeinfo);
+	time[24] = '\0';
 
-		va_start(argp, msg);
-		fprintf(stdout, "[%s]: ", time);
-		vfprintf(stdout, msg, argp);
-		fprintf(stdout, "\n");
-		va_end(argp);
-		fflush(stdout);
-	}
+	va_start(argp, msg);
+	fprintf(stdout, "[%s]: ", time);
+	vfprintf(stdout, msg, argp);
+	fprintf(stdout, "\n");
+	va_end(argp);
+	fflush(stdout);
+	return 0;
 }
+
 
 /**
  * @param char	*dev

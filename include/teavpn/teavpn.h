@@ -125,11 +125,18 @@ typedef struct _teavpn_packet {
 #define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT)) 
 #endif
 
-#ifndef TEAVPN_PACK
 #define TEAVPN_PACK(X) (OFFSETOF(teavpn_packet, data) + X)
-#endif
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-value"
 
 int tun_alloc(char *dev, int flags);
-void debug_log(uint8_t vlevel, const char *msg, ...);
+
+__attribute__((force_align_arg_pointer))
+uint8_t __internal_debug_log(const char *msg, ...);
+
+#define debug_log(VLEVEL, Y, ...) \
+	((VLEVEL <= verbose_level) && __internal_debug_log(Y, ##__VA_ARGS__))
+
 
 #endif
