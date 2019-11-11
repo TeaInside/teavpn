@@ -18,8 +18,9 @@ FILE *teavpn_auth_check(server_config *config, struct teavpn_packet_auth *auth)
 	char file[512], buffer[255];
 
 	sprintf(file, "%s/users/%s/password", config->data_dir, auth->username);
-	printf("%s\n", file);
-	fflush(stdout);
+
+	// printf("%s\n", file);
+	// fflush(stdout);
 
 	h1 = fopen(file, "r");
 	if (h1 == NULL) {
@@ -33,8 +34,9 @@ FILE *teavpn_auth_check(server_config *config, struct teavpn_packet_auth *auth)
 			buffer[len - 1] = '\0';
 		}
 
-		printf("rpassword: \"%s\"\n", buffer);
-		printf("auth_pas: \"%s\"\n", auth->password);
+		// printf("rpassword: \"%s\"\n", buffer);
+		// printf("auth_pas: \"%s\"\n", auth->password);
+		// fflush(stdout);
 
 		if (!strcmp(auth->password, buffer)) {
 			sprintf(file, "%s/users/%s/ip", config->data_dir, auth->username);

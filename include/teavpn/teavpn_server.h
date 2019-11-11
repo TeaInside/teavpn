@@ -39,7 +39,10 @@ struct connection_entry {
 	bool connected;
 	uint8_t error;
 	uint64_t seq;
+	uint32_t priv_ip;
 	struct sockaddr_in addr;
 };
+
+FILE *teavpn_auth_check(server_config *config, struct teavpn_packet_auth *auth);
 
 #endif

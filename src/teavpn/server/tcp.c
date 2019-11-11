@@ -138,8 +138,9 @@ static bool validate_auth(struct teavpn_packet_auth *auth)
 /**
  * Worker which accepts new connection.
  */
-static void *accept_worker_thread()
+static void *accept_worker_thread(server_config *config)
 {
+	FILE *h;
 	int client_fd;
 	uint8_t signal;
 	char *remote_addr;
@@ -211,16 +212,83 @@ static void *accept_worker_thread()
 				fflush(stdout);
 				#endif
 
-				// Prepare packet.
-				packet.info.type = TEAVPN_PACKET_SIG;
-				packet.info.len = sizeof(packet.data.sig);
-				packet.info.seq = 0;
-				packet.data.sig.sig = TEAVPN_SIG_AUTH_OK;
-				nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
-				if (nwrite < 0) {
-					perror("Error write to client after accept");
-					close(client_fd);
-					goto next_d;
+				h = teavpn_auth_check(config, &(packet.data.auth));
+				if (h) {
+					char buffer[64];
+					size_t len, sp = 0;
+					const uint8_t sig = 0xff;
+
+					memset(buffer, 0, sizeof(buffer));
+					fgets(buffer, 63, h);
+					len = strlen(buffer);
+
+					while ((buffer[sp] != ' ')) {
+						if (sp >= len) {
+							fclose(h);
+							close(client_fd);
+							debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
+							goto next_d;
+						}
+						sp++;
+					}
+
+					if (sp > sizeof("xxx.xxx.xxx.xxx/xx")) {
+						fclose(h);
+						close(client_fd);
+						debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
+						goto next_d;
+					}
+
+					if ((len - (sp - 1)) > sizeof("xxx.xxx.xxx.xxx")) {
+						fclose(h);
+						close(client_fd);
+						debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
+						goto next_d;	
+					}
+
+					debug_log(1, "%s connected from (%s:%d) [%s]\n",
+						packet.data.auth.username,
+						remote_addr,
+						remote_port,
+						buffer
+					);
+
+					connections[conn_index].fd = client_fd;
+					connections[conn_index].priv_ip = ip_read_conv(buffer);
+					connections[conn_index].error = 0;
+					connections[conn_index].seq = 1;
+					connections[conn_index].addr = client_addr;
+
+					// Prepare packet.
+					packet.info.type = TEAVPN_PACKET_SIG;
+					packet.info.len = sizeof(packet.data.sig);
+					packet.info.seq = 0;
+					packet.data.sig.sig = TEAVPN_SIG_AUTH_OK;
+					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
+					if (nwrite < 0) {
+						perror("Error write to client after accept");
+						close(client_fd);
+						goto next_d;
+						fclose(h);
+					}
+					fclose(h);
+
+					connections[conn_index].connected = true;
+					conn_count++;
+
+					write(m_pipe_fd[1], &sig, sizeof(sig));
+				} else {
+					// Prepare packet.
+					packet.info.type = TEAVPN_PACKET_SIG;
+					packet.info.len = sizeof(packet.data.sig);
+					packet.info.seq = 0;
+					packet.data.sig.sig = TEAVPN_SIG_AUTH_REJECT;
+					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
+					if (nwrite < 0) {
+						perror("Error write to client after accept");
+						close(client_fd);
+						goto next_d;
+					}
 				}
 			}
 		}
@@ -277,7 +345,12 @@ uint8_t teavpn_tcp_server(server_config *config)
 		return 1;
 	}
 
-	pthread_create(&accept_worker, NULL, accept_worker_thread, NULL);
+	pthread_create(
+		&accept_worker,
+		NULL,
+		(void * (*)(void *))accept_worker_thread,
+		(void *)config
+	);
 	pthread_setname_np(accept_worker, "accept-worker");
 
 	debug_log(0, "Listening on %s:%d...\n", config->bind_addr, config->bind_port);
@@ -370,6 +443,11 @@ uint8_t teavpn_tcp_server(server_config *config)
 					FD_CLR(connections[i].fd, &rd_set);
 				}
 			}
+		}
+
+		if (FD_ISSET(m_pipe_fd[0], &rd_set)) {
+			uint8_t sig;
+			read(m_pipe_fd[0], &sig, sizeof(sig));
 		}
 	}
 
