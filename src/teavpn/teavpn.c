@@ -5,6 +5,7 @@
  * @package TeaVPN
  */
 
+#include <time.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
@@ -22,8 +23,16 @@ void debug_log(uint8_t vlevel, const char *msg, ...)
 {
 	if (vlevel <= verbose_level) {
 		va_list argp;
+		time_t rawtime;
+		struct tm *timeinfo;
+
+		time(&rawtime);
+		timeinfo = localtime(&rawtime);
+
 		va_start(argp, msg);
+		fprintf(stdout, "[%s]: ", asctime(timeinfo));
 		vfprintf(stdout, msg, argp);
+		fprintf(stdout, "\n");
 		va_end(argp);
 		fflush(stdout);
 	}
