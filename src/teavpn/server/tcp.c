@@ -39,7 +39,6 @@ extern uint8_t verbose_level;
 static int tap_fd;
 static int net_fd;
 static int m_pipe_fd[2];
-static int a_pipe_fd[2];
 static int16_t conn_count = 0;
 static struct buffer_channel *bufchan;
 static struct connection_entry *connections;
@@ -151,7 +150,6 @@ static void *accept_worker_thread(server_config *config)
 {
 	FILE *h;
 	int client_fd;
-	uint8_t signal;
 	char *remote_addr;
 	int16_t conn_index;
 	uint16_t remote_port;
@@ -164,12 +162,6 @@ static void *accept_worker_thread(server_config *config)
 
 		// Set client_addr to zero.
 		memset(&client_addr, 0, sizeof(client_addr));
-
-		// Waiting for signal from parent.
-		if (read(a_pipe_fd[0], &signal, sizeof(signal)) < 0) {
-			perror("Error read from a_pipe_fd");
-			continue;
-		}
 
 		conn_index = get_free_connection_index();
 
@@ -190,8 +182,6 @@ static void *accept_worker_thread(server_config *config)
 			debug_log(1, "Accepting a connection from %s:%d\n", remote_addr, remote_port);
 
 			nread = read(client_fd, &(packet), sizeof(packet));
-
-			printf("nread: %ld\n", nread);
 
 			if (nread < 0) {
 				printf("Error read from %s:%d\n", remote_addr, remote_port);
@@ -429,14 +419,6 @@ uint8_t teavpn_tcp_server(server_config *config)
 			continue;
 		}
 
-		// Accept new connection.
-		if (FD_ISSET(net_fd, &rd_set)) {
-			const uint8_t a_pipe_signal = 0xff;
-			if (write(a_pipe_fd[1], &a_pipe_signal, sizeof(a_pipe_signal)) < 0) {
-				perror("Error write to a_pipe_fd");
-			}
-		}
-
 		// Read from tap_fd.
 		if (FD_ISSET(tap_fd, &rd_set)) {
 			nread = read(tap_fd, bufchan[bufchan_index].buffer, TEAVPN_TAP_READ_SIZE);
@@ -531,11 +513,6 @@ static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config
 
 	if (pipe(m_pipe_fd) < 0) {
 		perror("Cannot open pipe for m_pipe_fd");
-		return 1;
-	}
-
-	if (pipe(a_pipe_fd) < 0) {
-		perror("Cannot open pipe for a_pipe_fd");
 		return 1;
 	}
 
