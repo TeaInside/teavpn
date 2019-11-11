@@ -187,7 +187,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
 				debug_log(3, "[%ld][%ld] Read packet length %ld bytes\n", seq, packet.info.seq, packet.info.len);
-				debug_log(3, "Write to tap_fd %ld bytes\n", nread);
+				debug_log(3, "[%ld] Write to tap_fd %ld bytes\n", nread);
 				nwrite = write(tap_fd, packet.data.data, packet.info.len);
 				if (nwrite < 0) {
 					perror("Error write to tap_fd");
