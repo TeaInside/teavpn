@@ -626,7 +626,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 							perror("Error write to tap_fd");
 						}
 
-						debug_log(3, "Write to fd %ld bytes", nwrite);
+						debug_log(3, "Write to fd %ld bytes\n", nwrite);
 					}
 
 				} else {
