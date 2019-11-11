@@ -83,7 +83,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 	fflush(stdout);
 	#endif
 
-	nwrite = write(net_fd, &packet, sizeof(packet.info) + sizeof(packet.data.auth));
+	nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.auth));
 	if (nwrite < 0) {
 		perror("Error write");
 		goto close;

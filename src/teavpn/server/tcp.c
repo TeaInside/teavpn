@@ -198,7 +198,6 @@ static void *accept_worker_thread()
 
 			// Got auth packet.
 			if ((packet.info.type == TEAVPN_PACKET_AUTH) && (packet.info.seq == 0)) {
-				nread = read(client_fd, &(packet.data.auth), sizeof(packet.data.auth));
 				if (!validate_auth(&(packet.data.auth))) {
 					close(client_fd);
 				}

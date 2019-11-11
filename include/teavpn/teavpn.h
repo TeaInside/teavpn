@@ -11,6 +11,10 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 
+#ifndef OFFSETOF
+#define OFFSETOF(TYPE, ELEMENT) ((size_t)&(((TYPE *)0)->ELEMENT)) 
+#endif
+
 typedef struct _server_config {
 	char *bind_addr;
 	char *config_file;
