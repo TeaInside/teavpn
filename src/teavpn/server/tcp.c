@@ -569,7 +569,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 			nread = read(tap_fd, packet->data.data, TEAVPN_TAP_READ_SIZE);
 			bufchan[bufchan_index].len = packet->info.len = OFFSETOF(teavpn_packet, data) + nread;
 
-			debug_log(3, "Read from fd %ld bytes\n", nread);
+			debug_log(3, "Read from tap_fd %ld bytes\n", nread);
 
 			if (nread < 0) {
 				perror("Error read from tap_fd");
@@ -620,13 +620,12 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 					if (packet->info.type == TEAVPN_PACKET_DATA) {
 						net2tap++;
+						debug_log(3, "Write to tap_fd %ld bytes\n", packet->info.len - OFFSETOF(teavpn_packet, data));
 						nwrite = write(tap_fd, &(packet->data), packet->info.len - OFFSETOF(teavpn_packet, data));
 						if (nwrite < 0) {
 							connections[i].error++;
 							perror("Error write to tap_fd");
 						}
-
-						debug_log(3, "Write to fd %ld bytes\n", nwrite);
 					}
 
 				} else {
