@@ -101,6 +101,10 @@ bool teavpn_server_config_parser(char *internal_buf, server_config *config)
 			strcpy(internal_buf, &(buffer[k]));
 			config->inet4 = internal_buf;
 			internal_buf += strlen(internal_buf) + 1;
+		} else if (!strcmp(&(buffer[j]), "inet4_bcmask")) {
+			strcpy(internal_buf, &(buffer[k]));
+			config->inet4_broadcast = internal_buf;
+			internal_buf += strlen(internal_buf) + 1;
 		} else if (!strcmp(&(buffer[j]), "bind_addr")) {
 			strcpy(internal_buf, &(buffer[k]));
 			config->bind_addr = internal_buf;
