@@ -569,7 +569,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 			nread = read(tap_fd, packet->data.data, TEAVPN_TAP_READ_SIZE);
 			bufchan[bufchan_index].len = packet->info.len = OFFSETOF(teavpn_packet, data) + nread;
 
-			debug_log(3, "Read from tap_fd %ld bytes\n", nread);
+			debug_log(3, "[%ld], Read from tap_fd %ld bytes\n", packet->info.seq, nread);
 
 			if (nread < 0) {
 				perror("Error read from tap_fd");
