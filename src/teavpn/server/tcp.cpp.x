@@ -353,7 +353,7 @@ static void *teavpn_accept_connection(void *ptr)
 	ssize_t nwrite, nread;
 	struct teavpn_packet packet;
 	#define config ((server_config *)ptr)
-	#define auth ((struct teavpn_packet_auth *)(packet.data))	
+	#define auth ((struct teavpn_packet_auth *)(packet.data))
 	#define client_ip ((struct teavpn_client_ip *)&(packet.data))
 	#define client_addr ((struct sockaddr_in *)(&(packet.data[sizeof(struct teavpn_packet_auth)])))
 

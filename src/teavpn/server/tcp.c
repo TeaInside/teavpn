@@ -5,6 +5,8 @@
  * @package TeaVPN
  */
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -36,49 +38,32 @@ extern uint8_t verbose_level;
 
 static int tap_fd;
 static int net_fd;
-static int pipe_fd[2];
+static int m_pipe_fd[2];
+static int a_pipe_fd[2];
 static int16_t conn_count = 0;
-static int16_t queue_count = 0;
-static struct packet_queue *queue;
 static struct buffer_channel *bufchan;
-static struct worker_entry *dispatch_worker;
 static struct connection_entry *connections;
-static pthread_mutex_t accept_worker_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static bool teavpn_tcp_server_socket_setup(int sock_fd);
 static bool teavpn_tcp_server_init_iface(server_config *config);
 static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config);
 
-/**
- * Worker that accepts new connection from client.
- */
-static void *accept_worker_thread(void *x)
-{
-	pthread_mutex_lock(&accept_worker_mutex);
-
-	while (true) {
-
-	}
-
-	pthread_mutex_unlock(&accept_worker_mutex);
-	return NULL;
-}
 
 /**
- * Worker that dispatch data to client.
+ * Get non-busy connection entry.
  */
-static void *dispatch_worker_thread(uint64_t n)
+static int16_t get_free_connection_index()
 {
-	debug_log(2, "Spawning thread %ld...\n", n);
-	while (true) {
-		pthread_mutex_lock(&(dispatch_worker[n].mutex));
-		pthread_cond_wait(&(dispatch_worker[n].cond), &(dispatch_worker[n].mutex));
-		pthread_mutex_unlock(&(dispatch_worker[n].mutex));
+	if (!conn_count) return 0;
+
+	for (int i = 0; i < CONNECTION_ALLOC; i++) {
+		if (!connections[i].connected) {
+			return i;
+		}
 	}
 
-	return NULL;
+	return -1;
 }
-
 
 /**
  * Get non-busy buffer channer index.
@@ -90,9 +75,9 @@ static int16_t get_bufchan_index()
 
 	if (!conn_count) return 0;
 
-	for (int16_t i = 0; i < conn_count; i++) {
+	for (int16_t i = 0; i < BUFCHAN_ALLOC; i++) {
 		if (bufchan[i].ref_count == 0) {
-			if (buf_chan_wait) buf_chan_wait--;
+			if (buf_chan_wait > 0) buf_chan_wait--;
 			return i;
 		}
 	}
@@ -117,20 +102,123 @@ static int16_t get_bufchan_index()
 }
 
 /**
- * Add packet to the queue.
+ * Validate username and password format.
  */
-static void insert_queue(struct buffer_channel *buf)
+static bool validate_auth(struct teavpn_packet_auth *auth)
 {
-	if (queue_count == 0) {
-		queues[0].free = false;
-		queues[0].taken = false;
-		queues[0].bufchan = buf;
-		queues[0].conn_key = conn_key;
-		queue_count++;
-		return;
+	/// Min/max username length.
+	if ((auth->username_len < 4) || (auth->username_len > 64)) {
+		return false;
 	}
 
-	
+	// Min password length.
+	if ((auth->password_len < 6)) {
+		return false;
+	}
+
+	// Make sure the username is null terminated.
+	for (register uint16_t i = 0; i < 256; ++i) {
+		if (auth->username[i] == '\0') {
+			goto password_validate;
+		}
+	}
+	return false;
+
+
+	password_validate:
+	// Make sure the password is null terminated.
+	for (register uint16_t i = 0; i < 256; ++i) {
+		if (auth->password[i] == '\0') {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Worker which accepts new connection.
+ */
+static void *accept_worker_thread()
+{
+	int client_fd;
+	uint8_t signal;
+	char *remote_addr;
+	int16_t conn_index;
+	uint16_t remote_port;
+	teavpn_packet packet;
+	ssize_t nread, nwrite;
+	struct sockaddr_in client_addr;
+	socklen_t rlen = sizeof(struct sockaddr_in);
+
+	while (true) {
+
+		// Set client_addr to zero.
+		memset(&client_addr, 0, sizeof(client_addr));
+
+		// Waiting for signal from parent.
+		if (read(a_pipe_fd[0], &signal, sizeof(signal)) < 0) {
+			perror("Error read from a_pipe_fd");
+			continue;
+		}
+
+		conn_index = get_free_connection_index();
+
+		client_fd = accept(net_fd, (struct sockaddr *)&(client_addr), &rlen);
+		if (client_fd < 0) {
+			perror("Error accept");
+			goto next_d;
+		}
+
+		remote_addr = inet_ntoa(client_addr.sin_addr);
+		remote_port = ntohs(client_addr.sin_port);
+
+		if (conn_index == -1) {
+			debug_log(1, "Connection is full, cannot accept more client.\n");
+			close(client_fd);
+		} else {
+
+			debug_log(1, "Accepting a connection from %s:%d\n", remote_addr, remote_port);
+
+			nread = read(client_fd, &(packet), sizeof(packet));
+
+			printf("nread: %ld\n", nread);
+
+			if (nread < 0) {
+				printf("Error read from %s:%d\n", remote_addr, remote_port);
+				perror("Error read client after accept");
+				fflush(stdout);
+				close(client_fd);
+				goto next_d;
+			}
+
+			if (nread == 0) {
+				close(client_fd);
+				goto next_d;
+			}
+
+			// Got auth packet.
+			if ((packet.info.type == TEAVPN_PACKET_AUTH) && (packet.info.seq == 0)) {
+				nread = read(client_fd, &(packet.data.auth), sizeof(packet.data.auth));
+				if (!validate_auth(&(packet.data.auth))) {
+					close(client_fd);
+				}
+
+				// Debug only.
+				#if 1
+				printf("Username length: %d\n", packet.data.auth.username_len);
+				printf("Password length: %d\n", packet.data.auth.password_len);
+				printf("Username: \"%s\"\n", packet.data.auth.username);
+				printf("Password: \"%s\"\n\n", packet.data.auth.password);
+				fflush(stdout);
+				#endif
+			}
+		}
+
+		next_d:
+		(void)1;
+	}
+
+	return NULL;
 }
 
 /**
@@ -145,11 +233,10 @@ uint8_t teavpn_tcp_server(server_config *config)
 	pthread_t accept_worker;
 	char config_buffer[4096];
 	struct sockaddr_in server_addr;
-	struct packet_queue _queue[QUEUE_AMOUNT];
+	uint64_t tap2net = 0, net2tap = 0;
 	struct buffer_channel _bufchan[BUFCHAN_ALLOC];
 	struct connection_entry _connections[CONNECTION_ALLOC];
 
-	queue = _queue;
 	bufchan = _bufchan;
 	connections = _connections;
 
@@ -157,36 +244,11 @@ uint8_t teavpn_tcp_server(server_config *config)
 		return 1;
 	}
 
-	pthread_t dispatcher[config->threads];
-	struct worker_entry _dispatch_worker[config->threads];
-
-	// Init and lock all thread's mutex.
-	dispatch_worker = _dispatch_worker;
-	for (uint8_t i = 0; i < config->threads; ++i) {
-		dispatch_worker[i].busy = false;
-		dispatch_worker[i].queue = NULL;
-		if (pthread_mutex_init(&(dispatch_worker[i].mutex), NULL)) {
-			printf("Error: pthread_mutex_init\n");
-			return 1;
-		}
-		pthread_mutex_lock(&(dispatch_worker[i].mutex));
-		pthread_create(
-			&(dispatch_worker[i].thread),
-			NULL,
-			(void * (*)(void *))dispatch_worker_thread,
-			(void *)((uint64_t)(0ull | i))
-		);
-	}
-	pthread_mutex_lock(&accept_worker_mutex);
-
-	// Run accept worker.
-	pthread_create(&accept_worker, NULL, accept_worker_thread, NULL);
-
 	// Prepare server bind address data.
 	memset(&server_addr, 0, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = inet_addr(config->bind_addr);
 	server_addr.sin_port = htons(config->bind_port);
+	server_addr.sin_addr.s_addr = inet_addr(config->bind_addr);
 
 	// Bind socket to interface.
 	if (bind(net_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -204,18 +266,24 @@ uint8_t teavpn_tcp_server(server_config *config)
 		return 1;
 	}
 
+	pthread_create(&accept_worker, NULL, accept_worker_thread, NULL);
+	pthread_setname_np(accept_worker, "accept-worker");
+
 	debug_log(0, "Listening on %s:%d...\n", config->bind_addr, config->bind_port);
 
 	// Ignore SIGPIPE
 	signal(SIGPIPE, SIG_IGN);
 
+	max_fd = (
+		((tap_fd > net_fd) && (tap_fd > m_pipe_fd[0])) ? tap_fd :
+			(net_fd > m_pipe_fd[0]) ? net_fd : m_pipe_fd[0]
+	);
+
 	while (true) {
-
-		max_fd = (tap_fd > pipe_fd[0]) ? tap_fd : pipe_fd[0];
-
 		FD_ZERO(&rd_set);
+		FD_SET(net_fd, &rd_set);
 		FD_SET(tap_fd, &rd_set);
-		FD_SET(pipe_fd[0], &rd_set);
+		FD_SET(m_pipe_fd[0], &rd_set);
 
 		for (register int16_t i = 0; i < conn_count; i++) {
 			if (connections[i].connected) {
@@ -243,28 +311,55 @@ uint8_t teavpn_tcp_server(server_config *config)
 			continue;
 		}
 
-		#define packet ((teavpn_packet *)(bufchan[bufchan_index].buffer))
-
-		// Read from server's tap_fd.
-		if (FD_ISSET(tap_fd, &rd_set)) {
-			nread = read(tap_fd, packet->data.data, TEAVPN_PACKET_BUFFER);
-			debug_log(3, "Read from tap_fd %ld bytes\n", nread);
-
-			if (nread < 0) {
-				perror("Error read (tap_fd)");
-				goto next_1;
+		// Accept new connection.
+		if (FD_ISSET(net_fd, &rd_set)) {
+			const uint8_t a_pipe_signal = 0xff;
+			if (write(a_pipe_fd[1], &a_pipe_signal, sizeof(a_pipe_signal)) < 0) {
+				perror("Error write to a_pipe_fd");
 			}
-
-			packet->info.type = TEAVPN_PACKET_DATA;
-			packet->info.len = nread;
-			bufchan[bufchan_index].ref_count = conn_count;
-			insert_queue(bufchan[bufchan_index]);
 		}
 
-		next_1:
-		(void)1;
+		// Read from tap_fd.
+		if (FD_ISSET(tap_fd, &rd_set)) {
+			nread = read(tap_fd, bufchan[bufchan_index].buffer, TEAVPN_TAP_READ_SIZE);
+			if (nread < 0) {
+				perror("Error read from tap_fd");
+				goto next_1;
+			}
+			tap2net++;
+		}
 
-		#undef packet
+		// Read data from client.
+		next_1:
+		for (register int16_t i = 0; i < conn_count; i++) {
+			if (FD_ISSET(connections[i].fd, &rd_set)) {
+				if (connections[i].connected) {
+
+					do {
+						bufchan_index = get_bufchan_index();
+					} while (bufchan_index == -1);
+
+					nread = read(connections[i].fd, bufchan[bufchan_index].buffer, TEAVPN_PACKET_BUFFER);
+
+					if (nread < 0) {
+						connections[i].error++;
+						perror("Error read from connection fd");
+						if (connections[i].error > 15) {
+							connections[i].connected = false;
+							FD_CLR(connections[i].fd, &rd_set);
+							connections[i].fd = -1;
+						}
+						continue;
+					}
+
+					net2tap++;
+					bufchan[bufchan_index].len = nread;
+
+				} else {
+					FD_CLR(connections[i].fd, &rd_set);
+				}
+			}
+		}
 	}
 
 	return 0;
@@ -302,8 +397,13 @@ static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config
 		return 1;
 	}
 
-	if (pipe(pipe_fd) < 0) {
-		perror("Cannot open pipe");
+	if (pipe(m_pipe_fd) < 0) {
+		perror("Cannot open pipe for m_pipe_fd");
+		return 1;
+	}
+
+	if (pipe(a_pipe_fd) < 0) {
+		perror("Cannot open pipe for a_pipe_fd");
 		return 1;
 	}
 

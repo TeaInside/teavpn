@@ -30,6 +30,7 @@ uint8_t teavpn_tcp_server(server_config *config);
 
 struct buffer_channel {
 	uint16_t ref_count;
+	ssize_t len;
 	char buffer[sizeof(teavpn_packet)];
 };
 
@@ -38,24 +39,7 @@ struct connection_entry {
 	bool connected;
 	uint8_t error;
 	uint64_t seq;
+	struct sockaddr_in addr;
 };
-
-struct packet_queue {
-	bool free;
-	bool taken;
-	uint16_t conn_key;
-	struct buffer_channel *bufchan;
-};
-
-struct worker_entry {
-	bool busy;
-	pthread_t thread;
-	pthread_cond_t cond;
-	pthread_mutex_t mutex;
-	struct packet_queue *queue;
-};
-
-#define BUFPTR(X, Y) ((Y)&(X.buffer[0]))
-#define BUFPPTR(X, Y) ((Y)&(X->buffer[0]))
 
 #endif
