@@ -434,16 +434,15 @@ uint8_t teavpn_tcp_server(server_config *config)
 		for (register int16_t i = 0; i < conn_count; i++) {
 			if (FD_ISSET(connections[i].fd, &rd_set)) {
 				if (connections[i].connected) {
-
 					do {
 						bufchan_index = get_bufchan_index();
 					} while (bufchan_index == -1);
-
 
 					nread = read(connections[i].fd, bufchan[bufchan_index].buffer, TEAVPN_PACKET_BUFFER);
 
 					// Connection closed by client.
 					if (nread == 0) {
+						FD_CLR(connections[i].fd, &rd_set);
 						close(connections[i].fd);
 						connection_reset(i);
 						printf("Connection closed.\n");
@@ -455,6 +454,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 						perror("Error read from connection fd");
 						if (connections[i].error > 15) {
 							FD_CLR(connections[i].fd, &rd_set);
+							close(connections[i].fd);
 							connection_reset(i);
 						}
 						continue;
@@ -465,11 +465,14 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 				} else {
 					FD_CLR(connections[i].fd, &rd_set);
+					close(connections[i].fd);
 					connection_reset(i);
 				}
 			}
 		}
 
+		// New connection is made.
+		next_2:
 		if (FD_ISSET(m_pipe_fd[0], &rd_set)) {
 			uint8_t sig;
 			read(m_pipe_fd[0], &sig, sizeof(sig));
