@@ -215,8 +215,13 @@ static void *accept_worker_thread()
 				packet.info.type = TEAVPN_PACKET_SIG;
 				packet.info.len = sizeof(packet.data.sig);
 				packet.info.seq = 0;
-				packet.data.sig.sig = TEAVPN_SIG_AUTH_REJECT;
+				packet.data.sig.sig = TEAVPN_SIG_AUTH_OK;
 				nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
+				if (nwrite < 0) {
+					perror("Error write to client after accept");
+					close(client_fd);
+					goto next_d;
+				}
 			}
 		}
 
