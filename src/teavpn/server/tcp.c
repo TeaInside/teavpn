@@ -66,7 +66,7 @@ static void connection_entry_zero(int16_t i)
 	connections[i].priv_ip = 0;
 	memset(&(connections[i].addr), 0, sizeof(connections[i].addr));
 	memset(&(connections[i].mutex), 0, sizeof(connections[i].mutex));
-	pthread_mutex_init(&(connections[i].mutex));
+	pthread_mutex_init(&(connections[i].mutex), NULL);
 }
 
 
@@ -173,6 +173,8 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 			pthread_mutex_lock(&global_mutex_b);
 			queue_amount--;
 			queues[i].bufchan->ref_count--;
+			queues[i].used = false;
+			queues[i].taken = false;
 			pthread_mutex_unlock(&global_mutex_b);
 
 			#undef packet
@@ -597,14 +599,14 @@ uint8_t teavpn_tcp_server(server_config *config)
 			}
 			tap2net++;
 
-			register int16_t i, q = 0;
-			for (i = 0; i < conn_count; i++) {
+			register int16_t i, q;
+			for (q = i = 0; i < conn_count; i++) {
 				if (connections[i].connected) {
 					q++;
 					teavpn_tcp_enqueue(i, &(bufchan[bufchan_index]));
 				}
 			}
-			teavpn_tcp_populate_queue();
+			if (q) teavpn_tcp_populate_queue();
 		}
 
 		// Read data from client.
@@ -640,11 +642,13 @@ uint8_t teavpn_tcp_server(server_config *config)
 
 					if (packet->info.type == TEAVPN_PACKET_DATA) {
 
+						pthread_mutex_lock(&(connections[i].mutex));
 						connections[i].seq++;
-						debug_log(3, "[%ld][%ld] Read from client %ld bytes (%s)\n",
-							connections[i].seq, packet->info.seq, nread,
-							(connections[i].seq == packet->info.seq) ? "match" : "invalid seq");
+						pthread_mutex_unlock(&(connections[i].mutex));
 
+						debug_log(3, "[%ld][%ld] Read from client %ld bytes (pkt_len: %ld) (%s)\n",
+							connections[i].seq, packet->info.seq, nread, packet->info.len,
+							(connections[i].seq == packet->info.seq) ? "match" : "invalid seq");
 
 						net2tap++;
 						nwrite = write(tap_fd, &(packet->data), packet->info.len - OFFSETOF(teavpn_packet, data));

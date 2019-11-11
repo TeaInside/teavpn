@@ -206,8 +206,26 @@ uint8_t teavpn_tcp_client(client_config *config)
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
 
 				seq++;
-				debug_log(3, "[%ld][%ld] Read from server %ld bytes (%s)\n",
-					seq, packet.info.seq, nread, (seq == packet.info.seq) ? "match" : "invalid seq");
+				debug_log(3, "[%ld][%ld] Read from server %ld bytes (pkt_len: %ld) (%s)\n",
+					seq, packet.info.seq, nread, packet.info.len,
+					(seq == packet.info.seq) ? "match" : "invalid seq");
+
+				// Deep debugging here.
+				// This is the unforgetable history of my experience.
+				//
+				// There was something wrong with packet length and sequence number
+				// it took me severals hour to fix.
+				//
+				if (packet.info.len != nread) {
+					// Do hexdump!
+					for (uint16_t i = 0; i < nread; ++i) {
+						printf("%#x ", ((unsigned char *)(&packet))[i]);
+						if ((i % 16) == 0) printf("\n");
+					}
+					printf("\n");
+					fflush(stdout);
+				}
+
 
 				nwrite = write(tap_fd, packet.data.data, packet.info.len - OFFSETOF(teavpn_packet, data));
 				if (nwrite < 0) {
