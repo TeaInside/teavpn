@@ -75,7 +75,7 @@ static int16_t get_free_connection_index()
 }
 
 /**
- * Get non-busy buffer channer index.
+ * Get non-busy buffer channel index.
  */
 static int16_t get_bufchan_index()
 {
