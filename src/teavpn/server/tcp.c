@@ -39,15 +39,25 @@ extern uint8_t verbose_level;
 static int tap_fd;
 static int net_fd;
 static int m_pipe_fd[2];
+static uint64_t nqueue = 0;
+static uint8_t thread_amount;
 static int16_t conn_count = 0;
+static uint16_t queue_amount = 0;
+static struct worker_thread *workers;
 static struct buffer_channel *bufchan;
+static struct teavpn_tcp_queue *queues;
 static struct connection_entry *connections;
+static pthread_mutex_t global_mutex_a = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t global_mutex_b = PTHREAD_MUTEX_INITIALIZER;
 
 static bool teavpn_tcp_server_socket_setup(int sock_fd);
 static bool teavpn_tcp_server_init_iface(server_config *config);
 static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config);
 
-static void connection_reset(int16_t i)
+/**
+ * Initialize connection entry.
+ */
+static void connection_entry_zero(int16_t i)
 {
 	connections[i].fd = -1;
 	connections[i].connected = false;
@@ -56,6 +66,95 @@ static void connection_reset(int16_t i)
 	connections[i].priv_ip = 0;
 	memset(&(connections[i].addr), 0, sizeof(connections[i].addr));
 }
+
+
+/**
+ * Trigger worker thread.
+ */
+static void teavpn_tcp_populate_queue()
+{
+	register uint16_t i, j = queue_amount;
+
+	for (i = 0; i < QUEUE_AMOUNT; i++) {
+		if (!j) break;
+		if (!workers[i].busy) {
+			pthread_cond_signal(&(workers[i].cond));
+			j--;
+		}
+	}
+}
+
+
+/**
+ * Enqueue data transmission.
+ */
+static void teavpn_tcp_enqueue(uint16_t conn_index, struct buffer_channel *bufchan)
+{
+	register uint8_t x = 0;
+	while (true) {
+		for (register uint16_t i = 0; i < QUEUE_AMOUNT; i++) {
+			if (!queues[i].used) {
+				queues[i].used = true;
+				queues[i].taken = false;
+				queues[i].queue_id = nqueue++;
+				queues[i].conn_index = conn_index;
+				queues[i].bufchan = bufchan;
+				pthread_mutex_lock(&global_mutex_b);
+				queue_amount++;
+				bufchan->ref_count++;
+				pthread_mutex_unlock(&global_mutex_b);
+				return;
+			}
+		}
+		usleep(1000);
+		x++;
+		if (x >= 3) {
+			x = 0;
+			teavpn_tcp_populate_queue();
+		}
+	}
+}
+
+/**
+ * Worker thread.
+ */
+void *teavpn_tcp_worker_thread(struct worker_thread *x)
+{
+	register uint16_t i;
+	register bool has_job = false;
+
+	while (true) {
+		pthread_mutex_lock(&(x->mutex));
+		pthread_cond_wait(&(x->cond), &(x->mutex));
+
+		x->busy = true;
+
+		for (i = 0; i < QUEUE_AMOUNT; ++i) {
+			if (queues[i].used && (!queues[i].taken)) {
+				pthread_mutex_lock(&global_mutex_a);
+				queues[i].taken = true;
+				has_job = true;
+				pthread_mutex_unlock(&global_mutex_a);
+				break;
+			}
+		}
+
+		if (has_job) {
+			pthread_mutex_lock(&global_mutex_b);
+			queue_amount--;
+			queues[i].bufchan->ref_count--;
+			pthread_mutex_unlock(&global_mutex_b);
+		}
+
+		x->busy = false;
+
+		pthread_mutex_unlock(&(x->mutex));
+	}
+
+
+	return NULL;
+}
+
 
 /**
  * Get non-busy connection entry.
@@ -146,7 +245,7 @@ static bool validate_auth(struct teavpn_packet_auth *auth)
 /**
  * Worker which accepts new connection.
  */
-static void *accept_worker_thread(server_config *config)
+static void *teavpn_tcp_accept_worker_thread(server_config *config)
 {
 	FILE *h;
 	int client_fd;
@@ -221,10 +320,11 @@ static void *accept_worker_thread(server_config *config)
 					fgets(buffer, 63, h);
 					len = strlen(buffer);
 
-					while ((buffer[sp] != ' ')) {
+					while (buffer[sp] != ' ') {
 						if (sp >= len) {
 							fclose(h);
 							close(client_fd);
+							connection_entry_zero(conn_index);
 							debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
 							goto next_d;
 						}
@@ -234,7 +334,7 @@ static void *accept_worker_thread(server_config *config)
 					if ((sp > sizeof("xxx.xxx.xxx.xxx/xx")) || ((len - (sp - 1)) > sizeof("xxx.xxx.xxx.xxx"))) {
 						fclose(h);
 						close(client_fd);
-						connection_reset(conn_index);
+						connection_entry_zero(conn_index);
 						debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
 						goto next_d;	
 					}
@@ -261,7 +361,7 @@ static void *accept_worker_thread(server_config *config)
 					fclose(h);
 					if (nwrite < 0) {
 						close(client_fd);
-						connection_reset(conn_index);
+						connection_entry_zero(conn_index);
 						perror("Error write to client after accept");
 						goto next_d;
 					}
@@ -285,7 +385,7 @@ static void *accept_worker_thread(server_config *config)
 					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.conf));
 					if (nwrite < 0) {
 						close(client_fd);
-						connection_reset(conn_index);
+						connection_entry_zero(conn_index);
 						perror("Error write to client after accept");
 						goto next_d;
 					}
@@ -316,13 +416,6 @@ static void *accept_worker_thread(server_config *config)
 	return NULL;
 }
 
-/**
- * Thread dispatcher.
- */
-void *teavpn_tcp_dispatch_thread(void *x)
-{
-
-}
 
 /**
  * Main point of TeaVPN TCP Server.
@@ -337,14 +430,36 @@ uint8_t teavpn_tcp_server(server_config *config)
 	char config_buffer[4096];
 	struct sockaddr_in server_addr;
 	uint64_t tap2net = 0, net2tap = 0;
+	struct teavpn_tcp_queue _queues[QUEUE_AMOUNT];
 	struct buffer_channel _bufchan[BUFCHAN_ALLOC];
 	struct connection_entry _connections[CONNECTION_ALLOC];
 
+	queues = _queues;
 	bufchan = _bufchan;
 	connections = _connections;
 
 	if (teavpn_tcp_server_init(config_buffer, config)) {
 		return 1;
+	}
+
+	thread_amount = config->threads;
+	struct worker_thread _workers[config->threads];
+	workers = _workers;
+
+	for (register uint8_t i = 0; i < config->threads; ++i) {
+		char thread_name[] = "teavpn_tcp_worker_xxx";
+		workers[i].busy = false;
+		pthread_cond_init(&(workers[i].cond), NULL);
+		pthread_mutex_init(&(workers[i].mutex), NULL);
+		pthread_create(
+			&(workers[i].thread),
+			NULL,
+			(void * (*)(void *))teavpn_tcp_worker_thread,
+			(void *)&(workers[i])
+		);
+		sprintf(thread_name, "teavpn_tcp_worker_%d", i);
+		pthread_setname_np(workers[i].thread, thread_name);
+		pthread_detach(workers[i].thread);
 	}
 
 	// Prepare server bind address data.
@@ -372,7 +487,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 	pthread_create(
 		&accept_worker,
 		NULL,
-		(void * (*)(void *))accept_worker_thread,
+		(void * (*)(void *))teavpn_tcp_accept_worker_thread,
 		(void *)config
 	);
 	pthread_setname_np(accept_worker, "accept-worker");
@@ -427,6 +542,15 @@ uint8_t teavpn_tcp_server(server_config *config)
 				goto next_1;
 			}
 			tap2net++;
+
+			register int16_t i, q = 0;
+			for (i = 0; i < conn_count; i++) {
+				if (connections[i].connected) {
+					q++;
+					teavpn_tcp_enqueue(i, &(bufchan[bufchan_index]));
+				}
+			}
+			teavpn_tcp_populate_queue();
 		}
 
 		// Read data from client.
@@ -444,7 +568,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 					if (nread == 0) {
 						FD_CLR(connections[i].fd, &rd_set);
 						close(connections[i].fd);
-						connection_reset(i);
+						connection_entry_zero(i);
 						printf("Connection closed.\n");
 						continue;
 					}
@@ -455,7 +579,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 						if (connections[i].error > 15) {
 							FD_CLR(connections[i].fd, &rd_set);
 							close(connections[i].fd);
-							connection_reset(i);
+							connection_entry_zero(i);
 						}
 						continue;
 					}
@@ -466,7 +590,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 				} else {
 					FD_CLR(connections[i].fd, &rd_set);
 					close(connections[i].fd);
-					connection_reset(i);
+					connection_entry_zero(i);
 				}
 			}
 		}
@@ -488,12 +612,20 @@ uint8_t teavpn_tcp_server(server_config *config)
 static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config)
 {
 	// Initialize buffer channel value.
-	for (int i = 0; i < BUFCHAN_ALLOC; ++i) {
+	for (register uint16_t i = 0; i < BUFCHAN_ALLOC; ++i) {
 		bufchan[i].ref_count = 0;
 	}
 
+	// Initialize queues.
+	for (register uint16_t  i = 0; i < QUEUE_AMOUNT; ++i) {
+		queues[i].used = false;
+		queues[i].queue_id = -1;
+		queues[i].conn_index = -1;
+		queues[i].bufchan = NULL;
+	}
+
 	// Initialize connection entry value.
-	for (uint8_t i = 0; i < CONNECTION_ALLOC; ++i) {
+	for (register uint16_t i = 0; i < CONNECTION_ALLOC; ++i) {
 		connections[i].fd = -1;
 		connections[i].connected = false;
 		connections[i].error = 0;

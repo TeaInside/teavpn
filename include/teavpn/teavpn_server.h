@@ -23,7 +23,7 @@
 #define CONNECTION_ALLOC 24
 
 // Queue amount.
-#define QUEUE_AMOUNT 24
+#define QUEUE_AMOUNT (CONNECTION_ALLOC * 2)
 
 uint8_t teavpn_udp_server(server_config *config);
 uint8_t teavpn_tcp_server(server_config *config);
@@ -41,6 +41,21 @@ struct connection_entry {
 	uint64_t seq;
 	uint32_t priv_ip;
 	struct sockaddr_in addr;
+};
+
+struct teavpn_tcp_queue {
+	bool used;
+	bool taken;
+	int64_t queue_id;
+	int16_t conn_index;
+	struct buffer_channel *bufchan;
+};
+
+struct worker_thread {
+	bool busy;
+	pthread_t thread;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
 };
 
 FILE *teavpn_auth_check(server_config *config, struct teavpn_packet_auth *auth);
