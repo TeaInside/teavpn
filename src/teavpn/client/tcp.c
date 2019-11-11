@@ -102,6 +102,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 
 	packet.info.seq = ++seq; // 2
 	nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.auth));
+	debug_log(3, "Auth data sent (%ld bytes)\n", nwrite);
 	if (nwrite < 0) {
 		perror("Error write");
 		goto close;
@@ -122,6 +123,9 @@ uint8_t teavpn_tcp_client(client_config *config)
 			print_err_sig(packet.data.sig.sig);
 			goto close;
 		}
+	} else {
+		printf("Invalid\n");
+		goto close;
 	}
 
 	packet.info.seq = ++seq; // 4
