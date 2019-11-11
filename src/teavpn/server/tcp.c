@@ -400,12 +400,11 @@ uint8_t teavpn_tcp_server(server_config *config)
 	// Ignore SIGPIPE
 	signal(SIGPIPE, SIG_IGN);
 
-	max_fd = (
-		((tap_fd > net_fd) && (tap_fd > m_pipe_fd[0])) ? tap_fd :
-			(net_fd > m_pipe_fd[0]) ? net_fd : m_pipe_fd[0]
-	);
-
 	while (true) {
+
+		max_fd = (((tap_fd > net_fd) && (tap_fd > m_pipe_fd[0])) ? tap_fd :
+				(net_fd > m_pipe_fd[0]) ? net_fd : m_pipe_fd[0]);
+
 		FD_ZERO(&rd_set);
 		FD_SET(net_fd, &rd_set);
 		FD_SET(tap_fd, &rd_set);
