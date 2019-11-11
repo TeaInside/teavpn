@@ -65,7 +65,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 	teavpn_packet packet;
 	ssize_t nwrite, nread;
 	char config_buffer[4096];
-	uint64_t tap2net = 0, net2tap = 0;
+	uint64_t tap2net = 0, net2tap = 0, seq = 0;
 
 	#define server_addr ((struct sockaddr_in *)&(packet.data.data))
 
@@ -89,6 +89,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 	packet.info.type = TEAVPN_PACKET_AUTH;
 	packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(struct teavpn_packet_auth);
 	packet.info.seq = 0;
+	seq++;
 	packet.data.auth.username_len = config->username_len;
 	packet.data.auth.password_len = config->password_len;
 	strcpy(packet.data.auth.username, config->username);
@@ -165,12 +166,14 @@ uint8_t teavpn_tcp_client(client_config *config)
 
 			debug_log(3, "Read from tap_fd %ld bytes\n", nread);
 
+			packet.info.seq = seq;
 			packet.info.len = OFFSETOF(teavpn_packet, data) + nread;
 			nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + nread);
 			if (nwrite < 0) {
 				perror("Error write to net_fd");
 				goto next_1;
 			}
+			debug_log(3, "[%ld] Write to server %ld bytes\n", seq++, nwrite);
 		}
 
 		next_1:
@@ -183,8 +186,13 @@ uint8_t teavpn_tcp_client(client_config *config)
 			}
 
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
+				debug_log(3, "[%ld][%ld] Read packet length %ld bytes\n", seq, packet.info.seq, packet.info.len);
 				debug_log(3, "Write to tap_fd %ld bytes\n", nread);
-				write(tap_fd, packet.data.data, packet.info.len);
+				nwrite = write(tap_fd, packet.data.data, packet.info.len);
+				if (nwrite < 0) {
+					perror("Error write to tap_fd");
+					continue;
+				}
 			}
 		}
 	}

@@ -143,7 +143,7 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 		if (has_job) {
 			#define packet ((teavpn_packet *)(bufchan->buffer))
 
-			packet->info.seq = connections[queues[i].conn_index].seq++;
+			packet->info.seq = connections[queues[i].conn_index].seq;
 
 			nwrite = write(
 				connections[queues[i].conn_index].fd,
@@ -151,7 +151,7 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 				packet->info.len
 			);
 
-			debug_log(2, "Write to client %ld bytes\n", nwrite);
+			debug_log(3, "[%ld] Write to client %ld bytes\n", connections[queues[i].conn_index].seq++, nwrite);
 
 			if (nwrite == 0) {
 				close(connections[queues[i].conn_index].fd);
