@@ -25,13 +25,15 @@
 // Queue amount.
 #define QUEUE_AMOUNT (CONNECTION_ALLOC * 2)
 
+#define MAX_CLIENT_ERR 15
+
 uint8_t teavpn_udp_server(server_config *config);
 uint8_t teavpn_tcp_server(server_config *config);
 
 struct buffer_channel {
 	uint16_t ref_count;
 	ssize_t len;
-	char buffer[sizeof(teavpn_packet)];
+	char buffer[sizeof(teavpn_packet) + 10];
 };
 
 struct connection_entry {

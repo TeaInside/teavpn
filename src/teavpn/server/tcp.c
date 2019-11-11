@@ -121,6 +121,7 @@ static void teavpn_tcp_enqueue(uint16_t conn_index, struct buffer_channel *bufch
 void *teavpn_tcp_worker_thread(struct worker_thread *x)
 {
 	register uint16_t i;
+	register ssize_t nwrite;
 	register bool has_job = false;
 
 	while (true) {
@@ -140,10 +141,36 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 		}
 
 		if (has_job) {
+			#define packet ((teavpn_packet *)(bufchan.buffer))
+
+			packet->info.seq = connections[queues[i].conn_index].seq++;
+
+			nwrite = write(
+				connections[queues[i].conn_index].fd,
+				packet,
+				packet->info.len
+			);
+
+			debug_log(2, "Write to client %ld bytes\n", nwrite);
+
+			if (nwrite == 0) {
+				close(connections[queues[i].conn_index].fd);
+				connection_entry_zero(queues[i].conn_index);
+			} else if (nwrite < 0) {
+				connections[queues[i].conn_index].error++;
+				if (connections[queues[i].conn_index].error > MAX_CLIENT_ERR) {
+					close(connections[queues[i].conn_index].fd);
+					connection_entry_zero(queues[i].conn_index);
+				}
+				perror("Error write to client");
+			}
+
 			pthread_mutex_lock(&global_mutex_b);
 			queue_amount--;
 			queues[i].bufchan->ref_count--;
 			pthread_mutex_unlock(&global_mutex_b);
+
+			#undef packet
 		}
 
 		x->busy = false;
@@ -354,7 +381,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 					// Prepare packet.
 					packet.info.type = TEAVPN_PACKET_SIG;
-					packet.info.len = sizeof(packet.data.sig);
+					packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig);
 					packet.info.seq = 0;
 					packet.data.sig.sig = TEAVPN_SIG_AUTH_OK;
 					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
@@ -380,7 +407,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 					// Prepare packet.
 					packet.info.type = TEAVPN_PACKET_CONF;
-					packet.info.len = sizeof(packet.data.sig);
+					packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig);
 
 					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.conf));
 					if (nwrite < 0) {
@@ -396,7 +423,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 				} else {
 					// Prepare packet.
 					packet.info.type = TEAVPN_PACKET_SIG;
-					packet.info.len = sizeof(packet.data.sig);
+					packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig);
 					packet.info.seq = 0;
 					packet.data.sig.sig = TEAVPN_SIG_AUTH_REJECT;
 					nwrite = write(client_fd, &packet, OFFSETOF(teavpn_packet, data) + sizeof(packet.data.sig));
@@ -530,13 +557,20 @@ uint8_t teavpn_tcp_server(server_config *config)
 			continue;
 		}
 
+		#define packet ((teavpn_packet *)(bufchan[bufchan_index].buffer))
+
 		// Read from tap_fd.
 		if (FD_ISSET(tap_fd, &rd_set)) {
 			do {
 				bufchan_index = get_bufchan_index();
 			} while (bufchan_index == -1);
 
-			nread = read(tap_fd, bufchan[bufchan_index].buffer, TEAVPN_TAP_READ_SIZE);
+			packet->info.type = TEAVPN_PACKET_DATA;
+			nread = read(tap_fd, packet->data, TEAVPN_TAP_READ_SIZE);
+			bufchan[bufchan_index].len = packet->info.len = OFFSETOF(teavpn_packet, data) + nread;
+
+			debug_log(3, "Read from fd %ld bytes\n", nread);
+
 			if (nread < 0) {
 				perror("Error read from tap_fd");
 				goto next_1;
@@ -562,7 +596,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 						bufchan_index = get_bufchan_index();
 					} while (bufchan_index == -1);
 
-					nread = read(connections[i].fd, bufchan[bufchan_index].buffer, TEAVPN_PACKET_BUFFER);
+					nread = read(connections[i].fd, packet, TEAVPN_PACKET_BUFFER);
 
 					// Connection closed by client.
 					if (nread == 0) {
@@ -570,22 +604,30 @@ uint8_t teavpn_tcp_server(server_config *config)
 						close(connections[i].fd);
 						connection_entry_zero(i);
 						printf("Connection closed.\n");
-						continue;
+						goto next_2;
 					}
 
 					if (nread < 0) {
 						connections[i].error++;
 						perror("Error read from connection fd");
-						if (connections[i].error > 15) {
+						if (connections[i].error > MAX_CLIENT_ERR) {
 							FD_CLR(connections[i].fd, &rd_set);
 							close(connections[i].fd);
 							connection_entry_zero(i);
 						}
-						continue;
+						goto next_2;
 					}
 
-					net2tap++;
-					bufchan[bufchan_index].len = nread;
+					if (packet->type.info == TEAVPN_PACKET_DATA) {
+						net2tap++;
+						nwrite = write(tap_fd, &(packet->data), packet->info.len - OFFSETOF(teavpn_packet, data));
+						if (nwrite < 0) {
+							connections[i].error++;
+							perror("Error write to tap_fd");
+						}
+
+						debug_log(3, "Write to fd %ld bytes", nwrite);
+					}
 
 				} else {
 					FD_CLR(connections[i].fd, &rd_set);
@@ -601,6 +643,8 @@ uint8_t teavpn_tcp_server(server_config *config)
 			uint8_t sig;
 			read(m_pipe_fd[0], &sig, sizeof(sig));
 		}
+
+		#undef packet
 	}
 
 	return 0;

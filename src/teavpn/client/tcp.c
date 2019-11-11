@@ -87,7 +87,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 
 	// Prepare auth packet.
 	packet.info.type = TEAVPN_PACKET_AUTH;
-	packet.info.len = sizeof(struct teavpn_packet_auth);
+	packet.info.len = OFFSETOF(teavpn_packet, data) + sizeof(struct teavpn_packet_auth);
 	packet.info.seq = 0;
 	packet.data.auth.username_len = config->username_len;
 	packet.data.auth.password_len = config->password_len;
@@ -165,7 +165,7 @@ uint8_t teavpn_tcp_client(client_config *config)
 
 			debug_log(3, "Read from tap_fd %ld bytes\n", nread);
 
-			packet.info.len = nread;
+			packet.info.len = OFFSETOF(teavpn_packet, data) + nread;
 			nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + nread);
 			if (nwrite < 0) {
 				perror("Error write to net_fd");
