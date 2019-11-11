@@ -141,7 +141,7 @@ void *teavpn_tcp_worker_thread(struct worker_thread *x)
 		}
 
 		if (has_job) {
-			#define packet ((teavpn_packet *)(bufchan.buffer))
+			#define packet ((teavpn_packet *)(bufchan->buffer))
 
 			packet->info.seq = connections[queues[i].conn_index].seq++;
 
@@ -566,7 +566,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 			} while (bufchan_index == -1);
 
 			packet->info.type = TEAVPN_PACKET_DATA;
-			nread = read(tap_fd, packet->data, TEAVPN_TAP_READ_SIZE);
+			nread = read(tap_fd, packet->data.data, TEAVPN_TAP_READ_SIZE);
 			bufchan[bufchan_index].len = packet->info.len = OFFSETOF(teavpn_packet, data) + nread;
 
 			debug_log(3, "Read from fd %ld bytes\n", nread);
@@ -618,7 +618,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 						goto next_2;
 					}
 
-					if (packet->type.info == TEAVPN_PACKET_DATA) {
+					if (packet->info.type == TEAVPN_PACKET_DATA) {
 						net2tap++;
 						nwrite = write(tap_fd, &(packet->data), packet->info.len - OFFSETOF(teavpn_packet, data));
 						if (nwrite < 0) {
