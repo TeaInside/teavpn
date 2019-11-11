@@ -163,6 +163,8 @@ uint8_t teavpn_tcp_client(client_config *config)
 				goto next_1;
 			}
 
+			debug_log(3, "Read from tap_fd %ld bytes\n", nread);
+
 			packet.info.len = nread;
 			nwrite = write(net_fd, &packet, OFFSETOF(teavpn_packet, data) + nread);
 			if (nwrite < 0) {
@@ -174,13 +176,15 @@ uint8_t teavpn_tcp_client(client_config *config)
 		next_1:
 		if (FD_ISSET(net_fd, &rd_set)) {
 			nread = read(net_fd, &packet, sizeof(packet));
+
 			if (nread < 0) {
 				perror("Error read from net_fd");
 				goto next_1;	
 			}
 
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
-				
+				debug_log(3, "Write to tap_fd %ld bytes\n", nread);
+				write(tap_fd, packet.data.data, packet.info.len);
 			}
 		}
 	}

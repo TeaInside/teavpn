@@ -334,6 +334,14 @@ static void *accept_worker_thread(server_config *config)
 }
 
 /**
+ * Thread dispatcher.
+ */
+void *teavpn_tcp_dispatch_thread(void *x)
+{
+
+}
+
+/**
  * Main point of TeaVPN TCP Server.
  */
 uint8_t teavpn_tcp_server(server_config *config)
