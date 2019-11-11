@@ -241,17 +241,10 @@ static void *accept_worker_thread(server_config *config)
 						sp++;
 					}
 
-					if (sp > sizeof("xxx.xxx.xxx.xxx/xx")) {
+					if ((sp > sizeof("xxx.xxx.xxx.xxx/xx")) || ((len - (sp - 1)) > sizeof("xxx.xxx.xxx.xxx"))) {
 						fclose(h);
 						close(client_fd);
 						connection_reset(conn_index);
-						debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
-						goto next_d;
-					}
-
-					if ((len - (sp - 1)) > sizeof("xxx.xxx.xxx.xxx")) {
-						fclose(h);
-						close(client_fd);
 						debug_log(1, "Invalid ip configuration for username %s", packet.data.auth.username);
 						goto next_d;	
 					}
