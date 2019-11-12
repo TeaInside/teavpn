@@ -45,6 +45,8 @@ static struct teavpn_tcp_queue *queues;
 static struct buffer_channel *bufchan;
 static struct connection_entry *connections;
 static struct worker_thread *workers;
+static pthread_cond_t accept_worker_cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t accept_worker_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config);
 static void *teavpn_tcp_accept_worker_thread(server_config *config);
@@ -479,6 +481,10 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 			}
 		}
 
+		if (FD_ISSET(net_fd, &rd_set)) {
+			pthread_cond_signal(&accept_worker_cond);
+		}
+
 		/**
 		 * Since macro doesn't have scope limit, we have to undef here
 		 * so that it doesn't distrub the outer scope of variable usage.
@@ -504,7 +510,6 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 	while (true) {
 		pthread_mutex_lock(&(worker->mutex));
 		pthread_cond_wait(&(worker->cond), &(worker->mutex));
-
 		pthread_mutex_unlock(&(worker->mutex));
 	}
 	return NULL;
@@ -560,6 +565,9 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 
 	while (true) {
+
+		pthread_mutex_lock(&accept_worker_mutex);
+		pthread_cond_wait(&accept_worker_cond, &accept_worker_mutex);
 
 		/**
 		 * Set client_addr to zero.
@@ -833,6 +841,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		next_cycle:
 		(void)1;
+		pthread_mutex_unlock(&accept_worker_mutex);
 	}
 
 	return NULL;
