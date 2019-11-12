@@ -351,12 +351,20 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 			if (packet.info.type == TEAVPN_PACKET_DATA) {
 
 				while (nread < (packet.info.len)) {
+					register ssize_t tmp_nread;
+
 					debug_log(3, "Read extra %ld/%ld bytes", nread, packet.info.len);
-					nread += read(
+					tmp_nread = read(
 						net_fd,
 						&(((char *)&packet)[nread]),
 						packet.info.len - nread
 					);
+
+					if (tmp_nread < 0) {
+						perror("Error read extra");
+					} else {
+						nread += tmp_nread;
+					}
 				}
 
 				/**
