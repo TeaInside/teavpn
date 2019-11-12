@@ -526,7 +526,6 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 
 		i = worker_job_pull();
 
-
 		/**
 		 * There is no queue.
 		 */
@@ -534,8 +533,8 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 			goto job_done;
 		}
 
-
 		packet->info.seq = ++(connections[queues[i].conn_index].seq);
+
 		nwrite = write(connections[queues[i].conn_index].fd, packet, sizeof(*packet));
 
 		debug_log(3, "[%"PRIuPTR"] Write to client %s:%d %"PRIuPTR" bytes (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
@@ -588,6 +587,13 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 				connection_zero(i);
 			}
 		}
+
+		queues[i].bufchan->ref_count--;
+
+		pthread_mutex_lock(&worker_job_pull_mutex);
+		queues[i].used = false;
+		queues[i].taken = false;
+		pthread_mutex_unlock(&worker_job_pull_mutex);
 
 		job_done:
 		worker->busy = false;
@@ -758,7 +764,6 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		/**
 		 * Preparing client network interface configuration.
 		 */
-
 		memset(buffer, 0, sizeof(buffer));
 		pbuf = fgets(buffer, 63, h);
 		fclose(h);
