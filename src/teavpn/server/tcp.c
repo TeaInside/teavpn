@@ -46,8 +46,8 @@ static struct connection_entry *connections;
 static struct worker_thread *workers;
 
 static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config);
-static void *teavpn_tcp_worker_thread(server_config *config);
 static void *teavpn_tcp_accept_worker_thread(server_config *config);
+static void *teavpn_tcp_worker_thread(struct worker_thread *worker);
 static int16_t get_bufchan_index();
 static void queue_zero(register uint16_t i);
 static void connection_zero(register uint16_t i);
@@ -116,8 +116,9 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 	 * Create the worker threads.
 	 */
 	for (register uint8_t i = 0; i < config->threads; ++i) {
-		char thread_name[] = "teavpn_tcp_worker_xxx";
+		char thread_name[] = "teavpn-worker_xxx";
 		workers[i].busy = false;
+		workers[i].num = i;
 		pthread_cond_init(&(workers[i].cond), NULL);
 		pthread_mutex_init(&(workers[i].mutex), NULL);
 		pthread_create(
@@ -126,9 +127,9 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 			(void * (*)(void *))teavpn_tcp_worker_thread,
 			(void *)&(workers[i])
 		);
-		sprintf(thread_name, "teavpn_tcp_worker_%d", i);
-		pthread_setname_np(workers[i].thread, thread_name);
 		pthread_detach(workers[i].thread);
+		sprintf(thread_name, "teavpn-worker-%d", i);
+		pthread_setname_np(workers[i].thread, thread_name);
 	}
 
 	/**
@@ -274,8 +275,10 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 				bufchan_index = get_bufchan_index();
 			} while (bufchan_index == -1);
 
+			/**
+			 * Read from TUN/TAP.
+			 */
 			nread = read(tap_fd, packet->data.data, TEAVPN_TAP_READ_SIZE);
-
 			if (nread < 0) {
 				debug_log(0, "Error read from tap_fd");
 				perror("Error read from tap_fd");
@@ -386,14 +389,50 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 }
 
 
-static void *teavpn_tcp_worker_thread(server_config *config)
+
+/**
+ * Worker which dispatches data to clients.
+ */
+static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 {
+	while (true) {
+		pthread_mutex_lock(&(worker->mutex));
+		pthread_cond_wait(&(worker->cond), &(worker->mutex));
+
+		pthread_mutex_unlock(&(worker->mutex));
+	}
 	return NULL;
 }
 
 
+
+/**
+ * Worker which accepts new connection.
+ */
 static void *teavpn_tcp_accept_worker_thread(server_config *config)
 {
+	int client_fd;
+	char *remote_addr;
+	uint16_t remote_port;
+	struct sockaddr_in client_addr;
+	socklen_t rlen = sizeof(struct sockaddr_in);
+
+	while (true) {
+
+		// Set client_addr to zero.
+		memset(&client_addr, 0, sizeof(client_addr));
+
+		client_fd = accept(net_fd, (struct sockaddr *)&client_addr, &rlen);
+
+		if (client_fd < 0) {
+			debug_log(0, "Error on accept");
+			perror("Error on accept");
+			continue;
+		}
+
+		remote_addr = inet_ntoa(client_addr.sin_addr);
+		remote_port = ntohs(client_addr.sin_port);
+	}
 	return NULL;
 }
 

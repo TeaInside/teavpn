@@ -56,6 +56,7 @@ struct teavpn_tcp_queue {
 
 struct worker_thread {
 	bool busy;
+	uint8_t num;
 	pthread_t thread;
 	pthread_mutex_t mutex;
 	pthread_cond_t cond;
