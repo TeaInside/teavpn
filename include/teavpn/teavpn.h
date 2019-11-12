@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <inttypes.h>
 
 typedef struct _server_config {
 	char *bind_addr;
