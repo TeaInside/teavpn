@@ -49,6 +49,7 @@ static pthread_cond_t accept_worker_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t accept_worker_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t worker_job_pull_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+static void thread_job_broadcast();
 static void enqueue_packet(uint16_t conn, uint16_t bufchan_index);
 static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config);
 static void *teavpn_tcp_accept_worker_thread(server_config *config);
@@ -300,6 +301,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 					 * Send bufchan_index to connection i.
 					 */
 					enqueue_packet(i, bufchan_index);
+					thread_job_broadcast();
 				}
 			}
 		}
@@ -419,7 +421,6 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 		}
 
 
-		next_2:
 		/**
 		 * Deal with new connection.
 		 */
@@ -493,42 +494,68 @@ static void enqueue_packet(uint16_t conn, uint16_t bufchan_index)
 
 
 /**
+ * Broadcast job.
+ */
+static void thread_job_broadcast()
+{
+	for (register uint8_t i = 0; i < thread_amount; i++) {
+		if (!workers[i].busy) {
+			pthread_cond_signal(&(workers[i].cond));
+			return;
+		}
+	}
+}
+
+
+/**
  * Worker which dispatches data to clients.
  */
 static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 {
 
-	#define packet ((teavpn_packet *)(bufchan->buffer))
+	#define packet ((teavpn_packet *)(queues[i].bufchan->buffer))
 
-	register uint16_t i;
+	register int16_t i;
 	register ssize_t nwrite;
 
 	while (true) {
 		pthread_mutex_lock(&(worker->mutex));
 		pthread_cond_wait(&(worker->cond), &(worker->mutex));
 
+		worker->busy = true;
 
-		packet->info.seq = ++(connections[i].seq);
-		nwrite = write(connections[i].fd, packet, sizeof(*packet));
+		i = worker_job_pull();
+
+
+		/**
+		 * There is no queue.
+		 */
+		if (i == -1) {
+			goto job_done;
+		}
+
+
+		packet->info.seq = ++(connections[queues[i].conn_index].seq);
+		nwrite = write(connections[queues[i].conn_index].fd, packet, sizeof(*packet));
 
 		debug_log(3, "[%"PRIuPTR"] Write to client %s:%d %"PRIuPTR" bytes (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
-			connections[i].seq,
-			inet_ntoa(connections[i].addr.sin_addr),
-			ntohs(connections[i].addr.sin_port),
+			connections[queues[i].conn_index].seq,
+			inet_ntoa(connections[queues[i].conn_index].addr.sin_addr),
+			ntohs(connections[queues[i].conn_index].addr.sin_port),
 			nwrite,
-			connections[i].seq,
+			connections[queues[i].conn_index].seq,
 			packet->info.seq,
-			(connections[i].seq == packet->info.seq) ? "match" : "invalid"
+			(connections[queues[i].conn_index].seq == packet->info.seq) ? "match" : "invalid"
 		);
 
 		/**
 		 * Connection closed by client.
 		 */
 		if (nwrite == 0) {
-			close(connections[i].fd);
+			close(connections[queues[i].conn_index].fd);
 			debug_log(1, "(%s:%d) connection closed",
-				inet_ntoa(connections[i].addr.sin_addr),
-				ntohs(connections[i].addr.sin_port)
+				inet_ntoa(connections[queues[i].conn_index].addr.sin_addr),
+				ntohs(connections[queues[i].conn_index].addr.sin_port)
 			);
 			connection_zero(i);
 			continue;
@@ -536,8 +563,8 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 
 
 		if (nwrite < 0) {
-			char *remote_addr = inet_ntoa(connections[i].addr.sin_addr);
-			uint16_t remote_port = ntohs(connections[i].addr.sin_port);
+			char *remote_addr = inet_ntoa(connections[queues[i].conn_index].addr.sin_addr);
+			uint16_t remote_port = ntohs(connections[queues[i].conn_index].addr.sin_port);
 
 			debug_log(0, "Error write to %s:%d", remote_addr, remote_port);
 			perror("Error write to connection fd");
@@ -545,30 +572,31 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 			/**
 			 * Increment the error counter.
 			 */
-			connections[i].error++;
+			connections[queues[i].conn_index].error++;
 
 			/**
 			 * Force disconnect client if it has
 			 * reached the max number of errors.
 			 */
-			if (connections[i].error > MAX_CLIENT_ERR) {
+			if (connections[queues[i].conn_index].error > MAX_CLIENT_ERR) {
 				debug_log(0,
 					"Client %s:%d has been disconnected because it has reached the max number of errors",
 					remote_port,
 					remote_port
 				);
-				close(connections[i].fd);
+				close(connections[queues[i].conn_index].fd);
 				connection_zero(i);
 			}
 		}
 
+		job_done:
+		worker->busy = false;
 		pthread_mutex_unlock(&(worker->mutex));
 	}
 	return NULL;
 
 	#undef packet
 }
-
 
 
 /**

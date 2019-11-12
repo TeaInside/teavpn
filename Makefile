@@ -11,12 +11,12 @@ CONSTANTS =
 INCLUDE = -Iinclude/
 
 ifeq (${RELEASE_MODE},1)
-	LINKER_FLAGS  = ${STD_FLAG} ${INCLUDE} -Wall -fno-stack-protector -Ofast ${CONSTANTS} -no-pie -o
-	COMPILER_FLAGS = ${STD_FLAG} ${INCLUDE} -Wall -fno-stack-protector -Ofast ${CONSTANTS} -c -no-pie -o
+	LINKER_FLAGS  = ${STD_FLAG} ${INCLUDE} -Wall -fno-stack-protector -Ofast ${CONSTANTS} -o
+	COMPILER_FLAGS = ${STD_FLAG} ${INCLUDE} -Wall -fno-stack-protector -Ofast ${CONSTANTS} -c -o
 	NASM_COMPILE_FLAG = -f elf64 -O3 -o
 else
-	LINKER_FLAGS  = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -no-pie -o
-	COMPILER_FLAGS = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -c -no-pie -o
+	LINKER_FLAGS  = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -o
+	COMPILER_FLAGS = ${STD_FLAG} ${INCLUDE} -Wall -fstack-protector-strong -ggdb3 -O0 -DTEAVPN_DEBUG ${CONSTANTS} -c -o
 	NASM_COMPILE_FLAG = -f elf64 -O0 -o
 endif
 
