@@ -40,6 +40,7 @@ static int tap_fd;
 static int net_fd;
 static int m_pipe_fd[2];
 static uint8_t thread_amount;
+static uint16_t conn_count = 0;
 static struct teavpn_tcp_queue *queues;
 static struct buffer_channel *bufchan;
 static struct connection_entry *connections;
@@ -313,11 +314,11 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 					if (nread == 0) {
 						FD_CLR(connections[i].fd, &rd_set);
 						close(connections[i].fd);
-						connection_zero(i);
 						debug_log(1, "(%s:%d) connection closed",
 							inet_ntoa(connections[i].addr.sin_addr),
 							ntohs(connections[i].addr.sin_port)
 						);
+						connection_zero(i);
 						goto next_2;
 					}
 
@@ -438,6 +439,13 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 	struct sockaddr_in client_addr;
 	socklen_t rlen = sizeof(struct sockaddr_in);
 
+	/**
+	 * NDF
+	 */
+	char buffer[64 + OFFSETOF(teavpn_packet, data)], *pbuf;
+	size_t len, sp = 0;
+	const uint8_t sig = 0xff;
+
 
 	/**
 	 * Set timeout to 10 seconds.
@@ -555,9 +563,6 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		/**
 		 * Preparing client network interface configuration.
 		 */
-		char buffer[64 + OFFSETOF(teavpn_packet, data)], pbuf;
-		size_t len, sp = 0;
-		const uint8_t sig = 0xff;
 
 		memset(buffer, 0, sizeof(buffer));
 		pbuf = fgets(buffer, 63, h);
@@ -579,7 +584,6 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		if ((sp > sizeof("xxx.xxx.xxx.xxx/xx")) || ((len - (sp - 1)) > sizeof("xxx.xxx.xxx.xxx"))) {
 			close(client_fd);
-			connection_entry_zero(conn_index);
 			debug_log(0, "Invalid IP configuration for username %s", packet.data.auth.username);
 			goto next_cycle;	
 		}
@@ -606,6 +610,10 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.sig)));
 
+		debug_log(3, "[%ld] Write sig auth to %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
+				seq, remote_addr, remote_port, nwrite, seq, packet.info.seq,
+				(seq == packet.info.seq) ? "match" : "invalid");
+
 		if (nwrite == 0) {
 			debug_log(3, "Client %s:%d closed connection (authenticated)", remote_addr, remote_port);
 			close(client_fd);
@@ -627,6 +635,10 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		 */
 		seq++; // seq 3
 		nread = read(client_fd, &packet, sizeof(packet));
+
+		debug_log(3, "[%ld] Read sig ack from %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
+				seq, remote_addr, remote_port, nread, seq, packet.info.seq,
+				(seq == packet.info.seq) ? "match" : "invalid");
 
 		if (nread == 0) {
 			debug_log(3, "Client %s:%d closed connection (authenticated)", remote_addr, remote_port);
@@ -654,8 +666,8 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		/**
 		 * Verify ack signal..
 		 */
-		if ((packet.info.seq == TEAVPN_PACKET_SIG) && (packet.data.sig.sig == TEAVPN_SIG_ACK)) {
-			debug_log(3, "[%ld] Got ack from %s:%d (connection established)", seq);
+		if ((packet.info.type == TEAVPN_PACKET_SIG) && (packet.data.sig.sig == TEAVPN_SIG_ACK)) {
+			debug_log(3, "[%ld] Got ack from %s:%d (connection established)", seq, remote_addr, remote_port);
 		} else {
 			debug_log(3, "[%ld] Invalid ack signal from %s:%d (authenticated)", seq, remote_addr, remote_port);
 			debug_log(0, "Dropping connection from %s:%d...", remote_addr, remote_port);
@@ -669,12 +681,16 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		 * Send network interface configuration.
 		 */
 		packet.info.type = TEAVPN_PACKET_CONF;
-		packet.info.seq = ++seq;
+		packet.info.seq = ++seq; // seq 4
 		packet.info.len = TEAVPN_PACK(sizeof(packet.data.conf));
 		memcpy(packet.data.conf.inet4, buffer, sp);
 		packet.data.conf.inet4[sp] = '\0';
 		strcpy(packet.data.conf.inet4_broadcast, &(buffer[sp+1]));
 		nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.conf)));
+
+		debug_log(3, "[%ld] Write packet conf to %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
+				seq, remote_addr, remote_port, nwrite, seq, packet.info.seq,
+				(seq == packet.info.seq) ? "match" : "invalid");
 
 		if (nwrite == 0) {
 			debug_log(3, "Client %s:%d closed connection (authenticated)", remote_addr, remote_port);

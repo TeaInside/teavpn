@@ -176,14 +176,18 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 
 
 	/**
-	 * Send ack packet to server.
+	 * Send sig ack to server.
 	 */
 	packet.info.type = TEAVPN_PACKET_SIG;
 	packet.data.sig.sig = TEAVPN_SIG_ACK;
 	packet.info.seq = ++seq; // seq 3
-	nwrite = write(net_fd, &packet, TEAVPN_PACK(0));
 
-	debug_log(3, "[%ld] Write ack packet to server %ld bytes", seq, nwrite);
+	printf("info.type: %d = %d\n", packet.info.type, TEAVPN_PACKET_SIG);
+	printf("sig.sig: %d = %d\n", packet.data.sig.sig, TEAVPN_SIG_ACK);
+	fflush(stdout);
+	nwrite = write(net_fd, &packet, TEAVPN_PACK(sizeof(packet.data.sig)));
+
+	debug_log(3, "[%ld] Write sig ack to server %ld bytes", seq, nwrite);
 
 	if (nwrite == 0) {
 		debug_log(0, "Connection reset by peer");
