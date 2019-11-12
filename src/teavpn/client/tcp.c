@@ -143,9 +143,14 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 
 	debug_log(
 		3,
-		"[%ld] Read server signal %ld bytes (client_seq: %ld) (server_seq: %ld) %s",
+		"[%ld] Read server signal %ld bytes (client_seq: %ld) (server_seq: %ld) (seq %s)",
 		seq, nread, seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid"
 	);
+
+	if (nread == 0) {
+		debug_log(0, "Connection reset by peer");
+		goto close;
+	}
 
 	if (seq != packet.info.seq) {
 		debug_log(0, "Invalid packet sequence (client_seq: %ld) (server_seq: %ld)",
@@ -325,7 +330,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 			 */
 			seq++;
 			nread = read(net_fd, &packet, sizeof(packet));
-			debug_log(3, "[%ld] Read data from server %ld bytes (client_seq: %ld) (server_seq: %ld) %s",
+			debug_log(3, "[%ld] Read data from server %ld bytes (client_seq: %ld) (server_seq: %ld) (seq %s)",
 				seq, nread, seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid");
 			if (nread == 0) {
 				debug_log(0, "Connection reset by peer");
@@ -515,8 +520,16 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 	sprintf(cmd, "/sbin/ip route get %s", config->server_ip);
 	debug_log(0, "Executing: %s", cmd);
 	fp = popen(cmd, "r");
-	fgets(data, 99, fp);
+	q = fgets(data, 99, fp);
 	pclose(fp);
+
+	if (q == NULL) {
+		debug_log(0, "Cannot get server route via");
+
+		// // Commented for debug only.
+		// ret = false;
+		// goto ret;
+	}
 
 	p = strstr(data, "via");
 	if (p == NULL) {
@@ -540,11 +553,17 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 
 	sprintf(cmd, "/sbin/ip route add 0.0.0.0/1 via %s", "5.5.0.1");
 	debug_log(0, "Executing: %s", cmd);
-	system(cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
 
 	sprintf(cmd, "/sbin/ip route add 128.0.0.0/1 via %s", "5.5.0.1");
 	debug_log(0, "Executing: %s", cmd);
-	system(cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
 
 	ret = true;
 ret:

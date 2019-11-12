@@ -116,7 +116,6 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 	 * Create the worker threads.
 	 */
 	for (register uint8_t i = 0; i < config->threads; ++i) {
-		char thread_name[] = "teavpn-worker_xxx";
 		workers[i].busy = false;
 		workers[i].num = i;
 		pthread_cond_init(&(workers[i].cond), NULL);
@@ -128,9 +127,13 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 			(void *)&(workers[i])
 		);
 		pthread_detach(workers[i].thread);
+
+		#define thread_name (bufchan[0].buffer)
 		sprintf(thread_name, "teavpn-worker-%d", i);
 		pthread_setname_np(workers[i].thread, thread_name);
+		#undef thread_name
 	}
+	memset(bufchan[0].buffer, 0, sizeof("teavpn-worker-xxx"));
 
 	/**
 	 * Prepare server bind address data.
@@ -146,9 +149,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 	if (bind(net_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
 		debug_log(0, "Bind socket failed");
 		perror("Bind failed");
-		close(net_fd);
-		close(tap_fd);
-		return 1;
+		goto close_server;
 	}
 
 	/**
@@ -157,9 +158,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 	if (listen(net_fd, 3) < 0) {
 		debug_log(0, "Listen socket failed");
 		perror("Listen failed");
-		close(net_fd);
-		close(tap_fd);
-		return 1;
+		goto close_server;
 	}
 
 	/**
@@ -180,7 +179,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 	pthread_setname_np(accept_worker, "accept-worker");
 	pthread_detach(accept_worker);
 
-	debug_log(0, "Listening on %s:%d...\n", config->bind_addr, config->bind_port);
+	debug_log(0, "Listening on %s:%d...", config->bind_addr, config->bind_port);
 
 	/**
 	 * TeaVPN server event loop.
@@ -231,6 +230,15 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 			}
 		}
 
+
+		/**
+		 * Get buffer channel index.
+		 */
+		do {
+			bufchan_index = get_bufchan_index();
+		} while (bufchan_index == -1);
+
+
 		/**
 		 * Block main process until there is one or more ready fd.
 		 * Read `man 2 select_tut` for details.
@@ -267,14 +275,6 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 		 * Read data from server TUN/TAP.
 		 */
 		if (FD_ISSET(tap_fd, &rd_set)) {
-
-			/**
-			 * Get buffer channel index.
-			 */
-			do {
-				bufchan_index = get_bufchan_index();
-			} while (bufchan_index == -1);
-
 			/**
 			 * Read from TUN/TAP.
 			 */
@@ -407,19 +407,51 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 
 
 /**
+ * Get index of free connection entry.
+ */
+static int16_t get_free_conn_index()
+{
+	for (int16_t i = 0; i < CONNECTION_ALLOC; ++i) {
+		if (!connections[i].connected) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+
+/**
  * Worker which accepts new connection.
  */
 static void *teavpn_tcp_accept_worker_thread(server_config *config)
 {
+	FILE *h;
 	int client_fd;
+	uint64_t seq = 0;
 	char *remote_addr;
+	int16_t conn_index;
 	uint16_t remote_port;
+	teavpn_packet packet;
+	ssize_t nread, nwrite;
+	struct timeval timeout;
 	struct sockaddr_in client_addr;
 	socklen_t rlen = sizeof(struct sockaddr_in);
 
+
+	/**
+	 * Set timeout to 10 seconds.
+	 */
+	timeout.tv_sec = 10;
+	timeout.tv_usec = 0;
+
+
 	while (true) {
 
-		// Set client_addr to zero.
+		/**
+		 * Set client_addr to zero.
+		 */
+		seq = 0;
 		memset(&client_addr, 0, sizeof(client_addr));
 
 		client_fd = accept(net_fd, (struct sockaddr *)&client_addr, &rlen);
@@ -432,9 +464,154 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		remote_addr = inet_ntoa(client_addr.sin_addr);
 		remote_port = ntohs(client_addr.sin_port);
+
+		debug_log(3, "%s:%d is attempting to make a connection...", remote_addr, remote_port);
+
+		conn_index = get_free_conn_index();
+
+		if (conn_index == -1) {
+			debug_log(0, "Connection entry is full, cannot accept more client");
+			debug_log(0, "Dropping connection from %s:%d...", remote_addr, remote_port);
+			close(client_fd);
+			continue;
+		}
+
+		/**
+		 * Set recv timeout.
+		 */
+		if (setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
+			debug_log(0, "Error set recv timeout");
+			perror("Error set recv timeout");
+			continue;
+		}
+
+		/**
+		 * Set send timeout.
+		 */
+		if (setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
+			debug_log(0, "Error set recv timeout");
+			perror("Error set recv timeout");
+			continue;
+		}
+
+		/**
+		 * Read auth packet (username and password).
+		 */
+		seq++; // seq 1
+		nread = read(client_fd, &packet, sizeof(packet));
+
+		debug_log(3, "[%ld] Read auth packet from %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
+				seq, remote_addr, remote_port, nread, seq, packet.info.seq,
+				(seq == packet.info.seq) ? "match" : "invalid");
+
+		if (nread == 0) {
+			debug_log(3, "Client %s:%d closed connection");
+			close(client_fd);
+			continue;
+		}
+
+		if (nread < 0) {
+			debug_log(3, "An error occured when reading auth packet from %s:%d", remote_addr, remote_port);
+			perror("Error read from client (acceptor)");
+			close(client_fd);
+			continue;
+		}
+
+		if (seq != packet.info.seq) {
+			debug_log(0, "Invalid packet sequence (client_seq: %ld) (server_seq: %ld)",
+				seq, packet.info.seq);
+			close(client_fd);
+			continue;
+		}
+
+		/**
+		 * Validate credential from auth packet.
+		 */
+		if (packet.info.type == TEAVPN_PACKET_AUTH) {
+			h = teavpn_auth_check(config, &(packet.data.auth));
+		} else {
+			debug_log(3, "Invalid auth packet from %s:%d", remote_addr, remote_port);
+			debug_log(3, "Dropping connection from %s:%d...", remote_addr, remote_port);
+			close(client_fd);
+			continue;
+		}
+
+		if (h == NULL) {
+			/**
+			 * Invalid username or password.
+			 */
+			packet.info.type = TEAVPN_PACKET_SIG;
+			packet.info.len = TEAVPN_PACK(sizeof(packet.data.sig));
+			packet.info.seq = ++seq;
+			packet.data.sig.sig = TEAVPN_SIG_AUTH_REJECT;
+			nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.sig)));
+			debug_log(3, "Invalid username or password from %s:%d", remote_addr, remote_port);
+			debug_log(3, "Dropping connection from %s:%d...", remote_addr, remote_port);
+			close(client_fd);
+			continue;
+		}
+
+
+		/**
+		 * Preparing client network interface configuration.
+		 */
+		char buffer[64 + OFFSETOF(teavpn_packet, data)], pbuf;
+		size_t len, sp = 0;
+		const uint8_t sig = 0xff;
+
+		memset(buffer, 0, sizeof(buffer));
+		pbuf = fgets(buffer, 63, h);
+
+		if (pbuf == NULL) {
+			debug_log(0, "Invalid IP configuration for username %s", packet.data.auth.username);
+		}
+
+		len = strlen(buffer);
+
+		while (buffer[sp] != ' ') {
+			if (sp >= len) {
+				fclose(h);
+				close(client_fd);
+				debug_log(0, "Invalid IP configuration for username %s", packet.data.auth.username);
+				goto next_cycle;
+			}
+			sp++;
+		}
+
+		if ((sp > sizeof("xxx.xxx.xxx.xxx/xx")) || ((len - (sp - 1)) > sizeof("xxx.xxx.xxx.xxx"))) {
+			fclose(h);
+			close(client_fd);
+			connection_entry_zero(conn_index);
+			debug_log(0, "Invalid IP configuration for username %s", packet.data.auth.username);
+			goto next_cycle;	
+		}
+
+		debug_log(1, "%s connected from (%s:%d) [%s]", packet.data.auth.username, remote_addr, remote_port, buffer);
+
+
+
+		/**
+		 * Assign client fd to connection entry.
+		 */
+		connections[conn_index].fd = client_fd;
+		connections[conn_index].priv_ip = ip_read_conv(buffer);
+		connections[conn_index].error = 0;
+		connections[conn_index].addr = client_addr;
+
+
+		/**
+		 * 
+		 */
+
+
+		next_cycle:
+		(void)1;
 	}
+
 	return NULL;
 }
+
+
 
 /**
  * Initialize TeaVPN server (socket, pipe, etc.)
@@ -539,6 +716,7 @@ static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config
 }
 
 
+
 /**
  * Get non-busy buffer channel index.
  */
@@ -574,6 +752,7 @@ static int16_t get_bufchan_index()
 }
 
 
+
 /**
  * Set queue entry to zero (clean up).
  */
@@ -584,6 +763,7 @@ static void queue_zero(register uint16_t i)
 	queues[i].conn_index = -1;
 	queues[i].bufchan = NULL;
 }
+
 
 
 /**
@@ -600,6 +780,7 @@ static void connection_zero(register uint16_t i)
 	memset(&(connections[i].mutex), 0, sizeof(connections[i].mutex));
 	pthread_mutex_init(&(connections[i].mutex), NULL);
 }
+
 
 
 /**
@@ -650,6 +831,7 @@ static bool teavpn_tcp_server_init_iface(server_config *config)
 
 	return true;
 }
+
 
 
 /**
