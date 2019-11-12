@@ -578,22 +578,26 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 
 	// Commented for debug only.
 	sprintf(cmd, "/sbin/ip route add %s/32 via %s", config->server_ip, p);
-	debug_log(1, "Executing: %s\n", cmd);
+	debug_log(1, "Executing: %s", cmd);
 	system(cmd);
 
 	sprintf(cmd, "/sbin/ip route add 0.0.0.0/1 via %s", "5.5.0.1");
 	debug_log(0, "Executing: %s", cmd);
-	if (system(cmd)) {
-		ret = false;
-		goto ret;
-	}
+
+	system(cmd);
+	// if (system(cmd)) {
+	// 	ret = false;
+	// 	goto ret;
+	// }
 
 	sprintf(cmd, "/sbin/ip route add 128.0.0.0/1 via %s", "5.5.0.1");
 	debug_log(0, "Executing: %s", cmd);
-	if (system(cmd)) {
-		ret = false;
-		goto ret;
-	}
+
+	system(cmd);
+	// if (system(cmd)) {
+	// 	ret = false;
+	// 	goto ret;
+	// }
 
 	ret = true;
 ret:
