@@ -425,7 +425,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 							register ssize_t tmp_nread;
 							debug_log(3, "Read extra %ld/%ld bytes", nread, packet->info.len);
 							tmp_nread = read(
-								net_fd,
+								connections[i].fd,
 								&(((char *)packet)[nread]),
 								packet->info.len - nread
 							);
