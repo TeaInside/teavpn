@@ -560,18 +560,21 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 
 	p = strstr(data, "via");
 	if (p == NULL) {
-		debug_log(0, "Cannot get server route via");
+		p = strstr(data, "src");
+		if (p == NULL) {
+			debug_log(0, "Cannot get server route via");
 
-		// Commented for debug only.
-		ret = false;
-		goto ret;
-	} else {
-		while ((*p) != ' ') p++;
-		p++;
-		q = p;
-		while ((*q) != ' ') q++;
-		*q = '\0';
+			// Commented for debug only.
+			ret = false;
+			goto ret;
+		}
 	}
+
+	while ((*p) != ' ') p++;
+	p++;
+	q = p;
+	while ((*q) != ' ') q++;
+	*q = '\0';
 
 	// Commented for debug only.
 	sprintf(cmd, "/sbin/ip route add %s/32 via %s", config->server_ip, p);
