@@ -58,10 +58,10 @@ static bool teavpn_tcp_server_init_iface(server_config *config);
 /**
  * Main point of TeaVPN TCP Server.
  */
-uint8_t teavpn_tcp_server(server_config *config)
+__attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config *config)
 {
 	fd_set rd_set;
-	int max_fd, fd_ret;
+	int  fd_ret, max_fd;
 	ssize_t nwrite, nread;
 	int16_t bufchan_index;
 	pthread_t accept_worker;
@@ -248,7 +248,7 @@ uint8_t teavpn_tcp_server(server_config *config)
 		 * Got an error.
 		 */
 		if (fd_ret < 0) {
-			debug_log(1, "select(2) got an error");
+			debug_log(0, "select(2) got an error");
 			perror("select()");
 			continue;
 		}

@@ -117,7 +117,7 @@ typedef struct _teavpn_packet {
 		struct teavpn_client_ip conf;
 		struct teavpn_packet_sig sig;
 		struct teavpn_packet_auth auth;
-		char data[TEAVPN_PACKET_BUFFER - sizeof(uint16_t)];
+		char data[TEAVPN_PACKET_BUFFER];
 	} data;
 } teavpn_packet;
 
@@ -135,8 +135,6 @@ int tun_alloc(char *dev, int flags);
 __attribute__((force_align_arg_pointer))
 uint8_t __internal_debug_log(const char *msg, ...);
 
-#define debug_log(VLEVEL, Y, ...) \
-	((VLEVEL <= verbose_level) && __internal_debug_log(Y, ##__VA_ARGS__))
-
+#define debug_log(VLEVEL, Y, ...) if (VLEVEL <= verbose_level) {__internal_debug_log(Y, ##__VA_ARGS__);}
 
 #endif
