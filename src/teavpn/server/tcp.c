@@ -431,6 +431,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 							);
 
 							if (tmp_nread < 0) {
+								connections[i].error++;
 								perror("Error read extra");
 							} else {
 								nread += tmp_nread;
