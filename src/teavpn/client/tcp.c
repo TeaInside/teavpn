@@ -39,6 +39,7 @@ static int net_fd;
 
 static void print_err_sig(uint8_t sig);
 static bool teavpn_tcp_client_init(char *config_buffer, client_config *config);
+static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_client_ip *ip);
 
 /**
  * Main point of TeaVPN TCP Client.
@@ -85,7 +86,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	/**
 	 * Conncet to TeaVPN server.
 	 */
-	debug_log(0, "Connecting to %s:%d...\n", config->server_ip, config->server_port);
+	debug_log(0, "Connecting to %s:%d...", config->server_ip, config->server_port);
 	if (connect(net_fd, (struct sockaddr *)server_addr, sizeof(struct sockaddr_in)) < 0) {
 		debug_log(0, "Error on connect");
 		perror("Error on connect");
@@ -107,10 +108,10 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	 * Debug only.
 	 */
 	#ifdef TEAVPN_DEBUG
-	debug_log(3, "username: \"%s\"\n", packet.data.auth.username);
-	debug_log(3, "password: \"%s\"\n", packet.data.auth.password);
-	debug_log(3, "username_len: %d\n", packet.data.auth.username_len);
-	debug_log(3, "password_len: %d\n", packet.data.auth.password_len);
+	debug_log(3, "username: \"%s\"", packet.data.auth.username);
+	debug_log(3, "password: \"%s\"", packet.data.auth.password);
+	debug_log(3, "username_len: %d", packet.data.auth.username_len);
+	debug_log(3, "password_len: %d", packet.data.auth.password_len);
 	#endif
 
 	/**
@@ -172,7 +173,8 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	/**
 	 * Send ack packet to server.
 	 */
-	packet.info.type = TEAVPN_PACKET_ACK;
+	packet.info.type = TEAVPN_PACKET_SIG;
+	packet.data.sig.sig = TEAVPN_SIG_ACK;
 	packet.info.seq = ++seq; // seq 3
 	nwrite = write(net_fd, &packet, TEAVPN_PACK(0));
 
@@ -221,7 +223,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	/**
 	 * Apply network interface configuration to TUN/TAP interface.
 	 */
-	if (!teavpn_client_init_iface(config, &(packet.data.conf))) {
+	if (!teavpn_tcp_client_init_iface(config, &(packet.data.conf))) {
 		debug_log(0, "Cannot init TUN/TAP interface\n");
 		goto close;
 	}
@@ -368,33 +370,33 @@ static bool teavpn_tcp_client_init(char *config_buffer, client_config *config)
 {
 	if (config->config_file != NULL) {
 		if (!teavpn_client_config_parser(config_buffer, config)) {
-			printf("Config error!\n");
+			debug_log(0, "Config error!");
 			return 1;
 		}
 	}
 
 	if (config->username == NULL) {
-		printf("username cannot be empty\n");
+		debug_log(0, "username cannot be empty");
 		return 1;
 	}
 
 	if (config->username_len >= 64) {
-		printf("Invalid username length\n");
+		debug_log(0, "Invalid username length");
 		return 1;
 	}
 
 	if (config->password == NULL) {
-		printf("password cannot be empty\n");
+		debug_log(0, "password cannot be empty");
 		return 1;
 	}
 
 	if (config->server_ip == NULL) {
-		printf("server_ip cannot be empty\n");
+		debug_log(0, "server_ip cannot be empty");
 		return 1;
 	}
 
 	if (config->server_port == 0) {
-		printf("server_port cannot be zero\n");
+		debug_log(0, "server_port cannot be zero");
 		return 1;
 	}
 
@@ -406,23 +408,22 @@ static bool teavpn_tcp_client_init(char *config_buffer, client_config *config)
 	 */
 	debug_log(2, "Allocating TUN/TAP interface...");
 	if ((tap_fd = tun_alloc(config->dev, IFF_TUN)) < 0) {
-		printf("Error connecting to TUN/TAP interface %s!\n", config->dev);
+		debug_log(0, "Error connecting to TUN/TAP interface %s!", config->dev);
 		return 1;
 	}
-	debug_log(2, "OK\n");
-	debug_log(0, "Successfully created a new interface \"%s\".\n", config->dev);
+	debug_log(0, "Successfully created a new interface \"%s\".", config->dev);
 
 
 	/**
 	 * Create TCP socket.
 	 */
-	debug_log(1, "Creating TCP socket...\n");
+	debug_log(1, "Creating TCP socket...");
 	if ((net_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		close(tap_fd);
 		perror("Socket creation failed");
 		return 1;
 	}
-	debug_log(1, "TCP socket created successfully\n");
+	debug_log(1, "TCP socket created successfully");
 
 
 	return 0;
@@ -451,4 +452,104 @@ static void print_err_sig(uint8_t sig)
 			debug_log(0, "Unknown signal");
 			break;
 	}
+}
+
+
+/**
+ * Initialize network interface for TeaVPN client.
+ *
+ * @param client_config *config
+ * @param struct teavpn_client_ip *ip
+ * @return void
+ */
+static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_client_ip *ip)
+{
+	bool ret;
+	char cmd[100],
+		data[100],
+		*escaped_dev,
+		*escaped_inet4,
+		*escaped_inet4_broadcast,
+		*p, *q;
+	FILE *fp = NULL;
+
+	escaped_dev = escapeshellarg(config->dev);
+	escaped_inet4 = escapeshellarg(ip->inet4);
+	escaped_inet4_broadcast = escapeshellarg(ip->inet4_broadcast);
+
+	/**
+	 * Set interface up.
+	 */
+	sprintf(
+		cmd,
+		"/sbin/ip link set dev %s up mtu %d",
+		escaped_dev,
+		config->mtu
+	);
+	debug_log(1, "Executing: %s\n", cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
+
+
+	/**
+	 * Assign private IP.
+	 */
+	sprintf(
+		cmd,
+		"/sbin/ip addr add dev %s %s broadcast %s",
+		escaped_dev,
+		escaped_inet4,
+		escaped_inet4_broadcast
+	);
+	debug_log(1, "Executing: %s\n", cmd);
+	if (system(cmd)) {
+		ret = false;
+		goto ret;
+	}
+
+	/**
+	 * Get server route data.
+	 */
+	sprintf(cmd, "/sbin/ip route get %s", config->server_ip);
+	debug_log(1, "Executing: %s\n", cmd);
+	fp = popen(cmd, "r");
+	fgets(data, 99, fp);
+	pclose(fp);
+
+	p = strstr(data, "via");
+	if (p == NULL) {
+		debug_log(0, "Cannot get server route via");
+
+		// // Commented for debug only.
+		// ret = false;
+		// goto ret;
+	} else {
+		while ((*p) != ' ') p++;
+		p++;
+		q = p;
+		while ((*q) != ' ') q++;
+		*q = '\0';
+	}
+
+	// // Commented for debug only.
+	// sprintf(cmd, "/sbin/ip route add %s/32 via %s", config->server_ip, p);
+	// debug_log(1, "Executing: %s\n", cmd);
+	// system(cmd);
+
+	sprintf(cmd, "/sbin/ip route add 0.0.0.0/1 via %s", "5.5.0.1");
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
+
+	sprintf(cmd, "/sbin/ip route add 128.0.0.0/1 via %s", "5.5.0.1");
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
+
+	ret = true;
+ret:
+	free(escaped_dev);
+	free(escaped_inet4);
+	free(escaped_inet4_broadcast);
+	return ret;
 }
