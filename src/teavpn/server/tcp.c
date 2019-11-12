@@ -483,7 +483,7 @@ static void enqueue_packet(uint16_t conn, uint16_t bufchan_index)
 				queues[i].used = true;
 				queues[i].taken = false;
 				queues[i].conn_index = conn;
-				queues[i].bufchan = bufchan[bufchan_index];
+				queues[i].bufchan = &(bufchan[bufchan_index]);
 				return;
 			}
 		}
@@ -498,16 +498,18 @@ static void enqueue_packet(uint16_t conn, uint16_t bufchan_index)
 static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 {
 
-	#define packet ((teavpn_packet *)(bufchan.buffer))
+	#define packet ((teavpn_packet *)(bufchan->buffer))
 
 	register uint16_t i;
+	register ssize_t nwrite;
+
 	while (true) {
 		pthread_mutex_lock(&(worker->mutex));
 		pthread_cond_wait(&(worker->cond), &(worker->mutex));
 
 
 		packet->info.seq = ++(connections[i].seq);
-		nwrite = write(connections[i].fd, packet, TEAVPN_PACK(nread));
+		nwrite = write(connections[i].fd, packet, sizeof(*packet));
 
 		debug_log(3, "[%ld] Write to client %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
 			connections[i].seq,
@@ -523,7 +525,6 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 		 * Connection closed by client.
 		 */
 		if (nwrite == 0) {
-			FD_CLR(connections[i].fd, &rd_set);
 			close(connections[i].fd);
 			debug_log(1, "(%s:%d) connection closed",
 				inet_ntoa(connections[i].addr.sin_addr),
@@ -556,7 +557,6 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 					remote_port,
 					remote_port
 				);
-				FD_CLR(connections[i].fd, &rd_set);
 				close(connections[i].fd);
 				connection_zero(i);
 			}
@@ -565,6 +565,8 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 		pthread_mutex_unlock(&(worker->mutex));
 	}
 	return NULL;
+
+	#undef packet
 }
 
 
