@@ -334,8 +334,10 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 			 */
 			seq++;
 			nread = read(net_fd, &packet, sizeof(packet));
+
 			debug_log(3, "[%ld] Read data from server %ld bytes (client_seq: %ld) (server_seq: %ld) (seq %s)",
 				seq, nread, seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid");
+
 			if (nread == 0) {
 				debug_log(0, "Connection reset by peer");
 				goto close;
@@ -346,15 +348,27 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 				goto next_2;
 			}
 
-			/**
-			 * Write to TUN/TAP.
-			 */
-			nwrite = write(tap_fd, &(packet.data.data), nread - OFFSETOF(teavpn_packet, data));
-			debug_log(4, "Write to tap_fd %ld bytes", nwrite);
-			if (nread < 0) {
-				debug_log(0, "Error read from tap_fd");
-				perror("Error read from tap_fd");
-				goto next_2;
+			if (packet.info.type == TEAVPN_PACKET_DATA) {
+
+				while (nread < (packet.info.len)) {
+					debug_log(3, "Read extra %ld/%ld bytes", nread, packet.info.len);
+					nread += read(
+						net_fd,
+						&(((char *)&packet)[nread]),
+						packet.info.len - nread
+					);
+				}
+
+				/**
+				 * Write to TUN/TAP.
+				 */
+				nwrite = write(tap_fd, &(packet.data.data), nread - OFFSETOF(teavpn_packet, data));
+				debug_log(4, "Write to tap_fd %ld bytes", nwrite);
+				if (nread < 0) {
+					debug_log(0, "Error read from tap_fd");
+					perror("Error read from tap_fd");
+					goto next_2;
+				}
 			}
 		}
 

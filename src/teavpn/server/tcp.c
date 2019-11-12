@@ -288,6 +288,66 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 
 			packet->info.type = TEAVPN_PACKET_DATA;
 			packet->info.len = TEAVPN_PACK(nread);
+			for (register uint16_t i = 0; i < CONNECTION_ALLOC; i++) {
+				if (connections[i].connected) {
+					packet->info.seq = ++(connections[i].seq);
+
+					nwrite = write(connections[i].fd, packet, TEAVPN_PACK(nread));
+
+					debug_log(3, "[%ld] Write to client %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
+						connections[i].seq,
+						inet_ntoa(connections[i].addr.sin_addr),
+						ntohs(connections[i].addr.sin_port),
+						nwrite,
+						connections[i].seq,
+						packet->info.seq,
+						(connections[i].seq == packet->info.seq) ? "match" : "invalid"
+					);
+
+					/**
+					 * Connection closed by client.
+					 */
+					if (nwrite == 0) {
+						FD_CLR(connections[i].fd, &rd_set);
+						close(connections[i].fd);
+						debug_log(1, "(%s:%d) connection closed",
+							inet_ntoa(connections[i].addr.sin_addr),
+							ntohs(connections[i].addr.sin_port)
+						);
+						connection_zero(i);
+						continue;
+					}
+
+
+					if (nwrite < 0) {
+						char *remote_addr = inet_ntoa(connections[i].addr.sin_addr);
+						uint16_t remote_port = ntohs(connections[i].addr.sin_port);
+
+						debug_log(0, "Error write to %s:%d", remote_addr, remote_port);
+						perror("Error write to connection fd");
+
+						/**
+						 * Increment the error counter.
+						 */
+						connections[i].error++;
+
+						/**
+						 * Force disconnect client if it has
+						 * reached the max number of errors.
+						 */
+						if (connections[i].error > MAX_CLIENT_ERR) {
+							debug_log(0,
+								"Client %s:%d has been disconnected because it has reached the max number of errors",
+								remote_port,
+								remote_port
+							);
+							FD_CLR(connections[i].fd, &rd_set);
+							close(connections[i].fd);
+							connection_zero(i);
+						}
+					}
+				}
+			}
 		}
 
 
@@ -319,7 +379,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 							ntohs(connections[i].addr.sin_port)
 						);
 						connection_zero(i);
-						goto next_2;
+						continue;
 					}
 
 					/**
@@ -352,9 +412,46 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 							connection_zero(i);
 						}
 
-						goto next_2;
+						continue;
 					}
 
+
+					/**
+					 * Write to TUN/TAP server.
+					 */
+					if (packet->info.type == TEAVPN_PACKET_DATA) {
+
+						while (nread < (packet->info.len)) {
+							debug_log(3, "Read extra %ld/%ld bytes", nread, packet->info.len);
+							nread += read(
+								net_fd,
+								&(((char *)packet)[nread]),
+								packet->info.len - nread
+							);
+						}
+
+						connections[i].seq++;
+						debug_log(3, "[%ld] Read from client %s:%d (server_seq: %ld) (client_seq: %ld) (seq %s)",
+							connections[i].seq,
+							inet_ntoa(connections[i].addr.sin_addr),
+							ntohs(connections[i].addr.sin_port),
+							connections[i].seq,
+							packet->info.seq,
+							(connections[i].seq == packet->info.seq) ? "match" : "invalid"
+						);
+
+						nwrite = write(tap_fd, &(packet->data.data), nread - TEAVPN_PACK(0));
+						if (nwrite < 0) {
+							connections[i].error++;
+							perror("Error write to tap_fd");
+							continue;
+						}
+
+						debug_log(3, "Write to tap_fd %ld bytes", nwrite);
+
+					} else {
+						connections[i].error++;
+					}
 				}
 			}
 		}
