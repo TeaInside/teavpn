@@ -459,7 +459,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		if (client_fd < 0) {
 			debug_log(0, "Error on accept");
 			perror("Error on accept");
-			continue;
+			goto next_cycle;
 		}
 
 		remote_addr = inet_ntoa(client_addr.sin_addr);
@@ -473,7 +473,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 			debug_log(0, "Connection entry is full, cannot accept more client");
 			debug_log(0, "Dropping connection from %s:%d...", remote_addr, remote_port);
 			close(client_fd);
-			continue;
+			goto next_cycle;
 		}
 
 		/**
@@ -482,7 +482,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		if (setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
 			debug_log(0, "Error set recv timeout");
 			perror("Error set recv timeout");
-			continue;
+			goto next_cycle;
 		}
 
 		/**
@@ -491,7 +491,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		if (setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0) {
 			debug_log(0, "Error set recv timeout");
 			perror("Error set recv timeout");
-			continue;
+			goto next_cycle;
 		}
 
 		/**
@@ -507,21 +507,21 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		if (nread == 0) {
 			debug_log(3, "Client %s:%d closed connection");
 			close(client_fd);
-			continue;
+			goto next_cycle;
 		}
 
 		if (nread < 0) {
 			debug_log(3, "An error occured when reading auth packet from %s:%d", remote_addr, remote_port);
 			perror("Error read from client (acceptor)");
 			close(client_fd);
-			continue;
+			goto next_cycle;
 		}
 
 		if (seq != packet.info.seq) {
-			debug_log(0, "Invalid packet sequence (client_seq: %ld) (server_seq: %ld)",
-				seq, packet.info.seq);
+			debug_log(0, "Invalid packet sequence from %s:%d (client_seq: %ld) (server_seq: %ld)",
+				remote_addr, remote_port, seq, packet.info.seq);
 			close(client_fd);
-			continue;
+			goto next_cycle;
 		}
 
 		/**
@@ -533,7 +533,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 			debug_log(3, "Invalid auth packet from %s:%d", remote_addr, remote_port);
 			debug_log(3, "Dropping connection from %s:%d...", remote_addr, remote_port);
 			close(client_fd);
-			continue;
+			goto next_cycle;
 		}
 
 		if (h == NULL) {
@@ -542,13 +542,13 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 			 */
 			packet.info.type = TEAVPN_PACKET_SIG;
 			packet.info.len = TEAVPN_PACK(sizeof(packet.data.sig));
-			packet.info.seq = ++seq;
+			packet.info.seq = ++seq; // seq 2
 			packet.data.sig.sig = TEAVPN_SIG_AUTH_REJECT;
 			nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.sig)));
 			debug_log(3, "Invalid username or password from %s:%d", remote_addr, remote_port);
 			debug_log(3, "Dropping connection from %s:%d...", remote_addr, remote_port);
 			close(client_fd);
-			continue;
+			goto next_cycle;
 		}
 
 
@@ -561,7 +561,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		memset(buffer, 0, sizeof(buffer));
 		pbuf = fgets(buffer, 63, h);
-
+		fclose(h);
 		if (pbuf == NULL) {
 			debug_log(0, "Invalid IP configuration for username %s", packet.data.auth.username);
 		}
@@ -570,7 +570,6 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		while (buffer[sp] != ' ') {
 			if (sp >= len) {
-				fclose(h);
 				close(client_fd);
 				debug_log(0, "Invalid IP configuration for username %s", packet.data.auth.username);
 				goto next_cycle;
@@ -579,7 +578,6 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		}
 
 		if ((sp > sizeof("xxx.xxx.xxx.xxx/xx")) || ((len - (sp - 1)) > sizeof("xxx.xxx.xxx.xxx"))) {
-			fclose(h);
 			close(client_fd);
 			connection_entry_zero(conn_index);
 			debug_log(0, "Invalid IP configuration for username %s", packet.data.auth.username);
@@ -587,7 +585,6 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		}
 
 		debug_log(1, "%s connected from (%s:%d) [%s]", packet.data.auth.username, remote_addr, remote_port, buffer);
-
 
 
 		/**
@@ -600,9 +597,118 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 
 		/**
-		 * 
+		 * Send auth ok signal.
 		 */
+		packet.info.type = TEAVPN_PACKET_SIG;
+		packet.info.len = TEAVPN_PACK(sizeof(packet.data.sig));
+		packet.data.sig.sig = TEAVPN_SIG_AUTH_OK;
+		packet.info.seq = ++seq; // seq 2
 
+		nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.sig)));
+
+		if (nwrite == 0) {
+			debug_log(3, "Client %s:%d closed connection (authenticated)", remote_addr, remote_port);
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+		if (nwrite < 0) {
+			debug_log(3, "Error send auth ok signal to %s:%d", remote_addr, remote_port);
+			perror("Error write to client_fd (acceptor)");
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+
+		/**
+		 * Wait for ack signal.
+		 */
+		seq++; // seq 3
+		nread = read(client_fd, &packet, sizeof(packet));
+
+		if (nread == 0) {
+			debug_log(3, "Client %s:%d closed connection (authenticated)", remote_addr, remote_port);
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+		if (nread < 0) {
+			debug_log(3, "Error read ack packet from %s:%d", remote_addr, remote_port);
+			perror("Error read from client_fd (acceptor)");
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+		if (seq != packet.info.seq) {
+			debug_log(0, "Invalid packet sequence from %s:%d (client_seq: %ld) (server_seq: %ld) (authenticated)",
+				remote_addr, remote_port, seq, packet.info.seq);
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+		/**
+		 * Verify ack signal..
+		 */
+		if ((packet.info.seq == TEAVPN_PACKET_SIG) && (packet.data.sig.sig == TEAVPN_SIG_ACK)) {
+			debug_log(3, "[%ld] Got ack from %s:%d (connection established)", seq);
+		} else {
+			debug_log(3, "[%ld] Invalid ack signal from %s:%d (authenticated)", seq, remote_addr, remote_port);
+			debug_log(0, "Dropping connection from %s:%d...", remote_addr, remote_port);
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+
+		/**
+		 * Send network interface configuration.
+		 */
+		packet.info.type = TEAVPN_PACKET_CONF;
+		packet.info.seq = ++seq;
+		packet.info.len = TEAVPN_PACK(sizeof(packet.data.conf));
+		memcpy(packet.data.conf.inet4, buffer, sp);
+		packet.data.conf.inet4[sp] = '\0';
+		strcpy(packet.data.conf.inet4_broadcast, &(buffer[sp+1]));
+		nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.conf)));
+
+		if (nwrite == 0) {
+			debug_log(3, "Client %s:%d closed connection (authenticated)", remote_addr, remote_port);
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+		if (nwrite < 0) {
+			debug_log(3, "Error send network config to %s:%d", remote_addr, remote_port);
+			perror("Error write to client_fd (acceptor)");
+			close(client_fd);
+			connection_zero(conn_index);
+			goto next_cycle;
+		}
+
+
+		/**
+		 * Set entry to connected state.
+		 */
+		connections[conn_index].connected = true;
+		connections[conn_index].seq = seq;
+		conn_count++;
+
+
+		/**
+		 * Interrupt main process in order to read rd_set.
+		 */
+		nwrite = write(m_pipe_fd[1], &sig, sizeof(sig));
+		if (nwrite < 0) {
+			debug_log(0, "Error write to m_pipe_fd[1]");
+			perror("Error write to m_pipe_fd[1]");
+			goto next_cycle;
+		}
 
 		next_cycle:
 		(void)1;
