@@ -335,9 +335,6 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 			seq++;
 			nread = read(net_fd, &packet, sizeof(packet));
 
-			debug_log(3, "[%ld] Read data from server %ld bytes (client_seq: %ld) (server_seq: %ld) (seq %s)",
-				seq, nread, seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid");
-
 			if (nread == 0) {
 				debug_log(0, "Connection reset by peer");
 				goto close;
@@ -367,6 +364,9 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 						nread += tmp_nread;
 					}
 				}
+
+				debug_log(3, "[%ld] Read data from server %ld bytes (client_seq: %ld) (server_seq: %ld) (seq %s)",
+					seq, nread, seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid");
 
 				/**
 				 * Write to TUN/TAP.
@@ -450,7 +450,7 @@ static bool teavpn_tcp_client_init(char *config_buffer, client_config *config)
 	 * Create TCP socket.
 	 */
 	debug_log(1, "Creating TCP socket...");
-	if ((net_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
+	if ((net_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		close(tap_fd);
 		perror("Socket creation failed");
 		return 1;
