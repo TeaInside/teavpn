@@ -51,7 +51,7 @@ struct teavpn_tcp_queue {
 	bool taken;
 	int64_t queue_id;
 	int16_t conn_index;
-	struct buffer_channel *bufchan;
+	int16_t bufchan_index;
 };
 
 struct worker_thread {

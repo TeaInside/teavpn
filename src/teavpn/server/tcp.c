@@ -301,6 +301,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 					 * Send bufchan_index to connection i.
 					 */
 					bufchan[bufchan_index].ref_count++;
+					// printf("i = %d;  r = %d\n", bufchan_index, bufchan[bufchan_index].ref_count);
 					enqueue_packet(i, bufchan_index);
 					thread_job_broadcast();
 				}
@@ -485,7 +486,7 @@ static void enqueue_packet(uint16_t conn, uint16_t bufchan_index)
 				queues[i].used = true;
 				queues[i].taken = false;
 				queues[i].conn_index = conn;
-				queues[i].bufchan = &(bufchan[bufchan_index]);
+				queues[i].bufchan_index = bufchan_index;
 				return;
 			}
 		}
@@ -514,7 +515,7 @@ static void thread_job_broadcast()
 static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 {
 
-	#define packet ((teavpn_packet *)(queues[i].bufchan->buffer))
+	#define packet ((teavpn_packet *)(bufchan[queues[i].bufchan_index].buffer))
 
 	register int16_t i;
 	register ssize_t nwrite;
@@ -591,7 +592,8 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 
 
 		job_release:
-		queues[i].bufchan->ref_count--;
+		bufchan[queues[i].bufchan_index].ref_count--;
+		// printf("i = %d;  r = %d\n", queues[i].bufchan_index, bufchan[queues[i].bufchan_index].ref_count);
 
 		pthread_mutex_lock(&worker_job_pull_mutex);
 		queues[i].used = false;
@@ -1087,7 +1089,7 @@ static void queue_zero(register uint16_t i)
 	queues[i].used = false;
 	queues[i].queue_id = -1;
 	queues[i].conn_index = -1;
-	queues[i].bufchan = NULL;
+	queues[i].bufchan_index = -1;
 }
 
 
