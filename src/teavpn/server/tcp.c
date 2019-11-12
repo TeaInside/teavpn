@@ -300,6 +300,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 					 *
 					 * Send bufchan_index to connection i.
 					 */
+					bufchan[bufchan_index].ref_count++;
 					enqueue_packet(i, bufchan_index);
 					thread_job_broadcast();
 				}
