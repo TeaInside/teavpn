@@ -553,18 +553,18 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 	if (q == NULL) {
 		debug_log(0, "Cannot get server route via");
 
-		// // Commented for debug only.
-		// ret = false;
-		// goto ret;
+		// Commented for debug only.
+		ret = false;
+		goto ret;
 	}
 
 	p = strstr(data, "via");
 	if (p == NULL) {
 		debug_log(0, "Cannot get server route via");
 
-		// // Commented for debug only.
-		// ret = false;
-		// goto ret;
+		// Commented for debug only.
+		ret = false;
+		goto ret;
 	} else {
 		while ((*p) != ' ') p++;
 		p++;
@@ -573,10 +573,10 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 		*q = '\0';
 	}
 
-	// // Commented for debug only.
-	// sprintf(cmd, "/sbin/ip route add %s/32 via %s", config->server_ip, p);
-	// debug_log(1, "Executing: %s\n", cmd);
-	// system(cmd);
+	// Commented for debug only.
+	sprintf(cmd, "/sbin/ip route add %s/32 via %s", config->server_ip, p);
+	debug_log(1, "Executing: %s\n", cmd);
+	system(cmd);
 
 	sprintf(cmd, "/sbin/ip route add 0.0.0.0/1 via %s", "5.5.0.1");
 	debug_log(0, "Executing: %s", cmd);
