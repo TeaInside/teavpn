@@ -915,7 +915,7 @@ static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config
 	 * Create TCP socket.
 	 */
 	debug_log(1, "Creating TCP socket...");
-	if ((net_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	if ((net_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
 		debug_log(0, "Cannot create TCP socket");
 		perror("Socket creation failed");
 		close(m_pipe_fd[0]);

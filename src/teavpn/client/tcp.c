@@ -362,7 +362,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 
 					if (tmp_nread < 0) {
 						perror("Error read extra");
-						
+
 					} else {
 						nread += tmp_nread;
 					}
@@ -450,7 +450,7 @@ static bool teavpn_tcp_client_init(char *config_buffer, client_config *config)
 	 * Create TCP socket.
 	 */
 	debug_log(1, "Creating TCP socket...");
-	if ((net_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	if ((net_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
 		close(tap_fd);
 		perror("Socket creation failed");
 		return 1;
