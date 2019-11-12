@@ -455,7 +455,6 @@ static uint8_t teavpn_tcp_server_init(char *config_buffer, server_config *config
 		close(m_pipe_fd[1]);
 		return 1;
 	}
-	debug_log(2, "OK\n");
 	debug_log(0, "Successfully created a new interface \"%s\".", config->dev);
 
 	/**
@@ -600,12 +599,12 @@ static bool teavpn_tcp_server_init_iface(server_config *config)
 	free(escaped_inet4);
 	free(escaped_inet4_broadcast);
 
-	debug_log(0, "Executing: %s\n", cmd1);
+	debug_log(0, "Executing: %s", cmd1);
 	if (system(cmd1)) {
 		return false;
 	}
 
-	debug_log(0, "Executing: %s\n", cmd2);
+	debug_log(0, "Executing: %s", cmd2);
 	if (system(cmd2)) {
 		return false;
 	}

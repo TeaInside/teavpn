@@ -503,7 +503,7 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 		escaped_inet4,
 		escaped_inet4_broadcast
 	);
-	debug_log(1, "Executing: %s\n", cmd);
+	debug_log(0, "Executing: %s", cmd);
 	if (system(cmd)) {
 		ret = false;
 		goto ret;
@@ -513,7 +513,7 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 	 * Get server route data.
 	 */
 	sprintf(cmd, "/sbin/ip route get %s", config->server_ip);
-	debug_log(1, "Executing: %s\n", cmd);
+	debug_log(0, "Executing: %s", cmd);
 	fp = popen(cmd, "r");
 	fgets(data, 99, fp);
 	pclose(fp);
@@ -539,11 +539,11 @@ static bool teavpn_tcp_client_init_iface(client_config *config, struct teavpn_cl
 	// system(cmd);
 
 	sprintf(cmd, "/sbin/ip route add 0.0.0.0/1 via %s", "5.5.0.1");
-	debug_log(1, "Executing: %s\n", cmd);
+	debug_log(0, "Executing: %s", cmd);
 	system(cmd);
 
 	sprintf(cmd, "/sbin/ip route add 128.0.0.0/1 via %s", "5.5.0.1");
-	debug_log(1, "Executing: %s\n", cmd);
+	debug_log(0, "Executing: %s", cmd);
 	system(cmd);
 
 	ret = true;
