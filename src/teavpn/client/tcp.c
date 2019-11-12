@@ -120,7 +120,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	packet.info.seq = ++seq; // seq 1
 	nwrite = write(net_fd, &packet, TEAVPN_PACK(sizeof(packet.data.auth)));
 
-	debug_log(3, "["PRIuPTR"] Write auth packet to server "PRIuPTR" bytes", seq, nwrite);
+	debug_log(3, "[%"PRIuPTR"] Write auth packet to server %"PRIuPTR" bytes", seq, nwrite);
 
 	if (nwrite == 0) {
 		debug_log(0, "Connection reset by peer");
@@ -143,7 +143,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 
 	debug_log(
 		3,
-		"["PRIuPTR"] Read server signal "PRIuPTR" bytes (client_seq: "PRIuPTR") (server_seq: "PRIuPTR") (seq %s)",
+		"[%"PRIuPTR"] Read server signal %"PRIuPTR" bytes (client_seq: %"PRIuPTR") (server_seq: %"PRIuPTR") (seq %s)",
 		seq, nread, seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid"
 	);
 
@@ -153,7 +153,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	}
 
 	if (seq != packet.info.seq) {
-		debug_log(0, "Invalid packet sequence (client_seq: "PRIuPTR") (server_seq: "PRIuPTR")",
+		debug_log(0, "Invalid packet sequence (client_seq: %"PRIuPTR") (server_seq: %"PRIuPTR")",
 			seq, packet.info.seq);
 		goto close;
 	}
@@ -187,7 +187,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	fflush(stdout);
 	nwrite = write(net_fd, &packet, TEAVPN_PACK(sizeof(packet.data.sig)));
 
-	debug_log(3, "["PRIuPTR"] Write sig ack to server "PRIuPTR" bytes", seq, nwrite);
+	debug_log(3, "[%"PRIuPTR"] Write sig ack to server %"PRIuPTR" bytes", seq, nwrite);
 
 	if (nwrite == 0) {
 		debug_log(0, "Connection reset by peer");
@@ -209,7 +209,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 	nread = read(net_fd, &packet, sizeof(packet));
 
 	if (seq != packet.info.seq) {
-		debug_log(0, "Invalid packet sequence (client_seq: "PRIuPTR") (server_seq: "PRIuPTR")",
+		debug_log(0, "Invalid packet sequence (client_seq: %"PRIuPTR") (server_seq: %"PRIuPTR")",
 			seq, packet.info.seq);
 		goto close;
 	}
@@ -298,7 +298,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 			 * Read from TUN/TAP.
 			 */
 			nread = read(tap_fd, &(packet.data.data), TEAVPN_TAP_READ_SIZE);
-			debug_log(4, "Read from tap_fd "PRIuPTR" bytes", nread);
+			debug_log(4, "Read from tap_fd %"PRIuPTR" bytes", nread);
 			if (nread < 0) {
 				debug_log(0, "Error read from tap_fd");
 				perror("Error read from tap_fd");
@@ -311,7 +311,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 			packet.info.seq = ++seq;
 			packet.info.len = TEAVPN_PACK(nread);
 			nwrite = write(net_fd, &packet, TEAVPN_PACK(nread));
-			debug_log(3, "["PRIuPTR"] Write data to server "PRIuPTR" bytes", seq, nwrite);
+			debug_log(3, "[%"PRIuPTR"] Write data to server %"PRIuPTR" bytes", seq, nwrite);
 			if (nwrite == 0) {
 				debug_log(0, "Connection reset by peer");
 				goto close;
@@ -350,7 +350,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 				while (nread < (packet.info.len)) {
 					register ssize_t tmp_nread;
 
-					debug_log(3, "Read extra "PRIuPTR"/"PRIuPTR" bytes", nread, packet.info.len);
+					debug_log(3, "Read extra %"PRIuPTR"/%"PRIuPTR" bytes", nread, packet.info.len);
 					tmp_nread = read(
 						net_fd,
 						&(((char *)&packet)[nread]),
@@ -365,14 +365,14 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_client(client_config
 					}
 				}
 
-				debug_log(3, "["PRIuPTR"] Read data from server "PRIuPTR" bytes (client_seq: "PRIuPTR") (server_seq: "PRIuPTR") (seq %s)",
+				debug_log(3, "[%"PRIuPTR"] Read data from server %"PRIuPTR" bytes (client_seq: %"PRIuPTR") (server_seq: %"PRIuPTR") (seq %s)",
 					seq, nread, seq, packet.info.seq, (seq == packet.info.seq) ? "match" : "invalid");
 
 				/**
 				 * Write to TUN/TAP.
 				 */
 				nwrite = write(tap_fd, &(packet.data.data), nread - OFFSETOF(teavpn_packet, data));
-				debug_log(4, "Write to tap_fd "PRIuPTR" bytes", nwrite);
+				debug_log(4, "Write to tap_fd %"PRIuPTR" bytes", nwrite);
 				if (nread < 0) {
 					debug_log(0, "Error read from tap_fd");
 					perror("Error read from tap_fd");
