@@ -379,7 +379,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 
 						while (nread < (packet->info.len)) {
 							register ssize_t tmp_nread;
-							debug_log(3, "Read extra %"PRIuPTR"/%"PRIuPTR" bytes", nread, packet->info.len);
+							debug_log(3, "Read extra %ld/%ld bytes", nread, packet->info.len);
 							tmp_nread = read(
 								connections[i].fd,
 								&(((char *)packet)[nread]),
@@ -395,7 +395,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 						}
 
 						connections[i].seq++;
-						debug_log(3, "[%"PRIuPTR"] Read from client %s:%d (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
+						debug_log(3, "[%ld] Read from client %s:%d (server_seq: %ld) (client_seq: %ld) (seq %s)",
 							connections[i].seq,
 							inet_ntoa(connections[i].addr.sin_addr),
 							ntohs(connections[i].addr.sin_port),
@@ -411,7 +411,7 @@ __attribute__((force_align_arg_pointer)) uint8_t teavpn_tcp_server(server_config
 							continue;
 						}
 
-						debug_log(3, "Write to tap_fd %"PRIuPTR" bytes", nwrite);
+						debug_log(3, "Write to tap_fd %ld bytes", nwrite);
 
 					} else {
 						connections[i].error++;
@@ -535,9 +535,9 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 
 		packet->info.seq = ++(connections[queues[i].conn_index].seq);
 
-		nwrite = write(connections[queues[i].conn_index].fd, packet, sizeof(*packet));
+		nwrite = write(connections[queues[i].conn_index].fd, packet, packet->info.len);
 
-		debug_log(3, "[%"PRIuPTR"] Write to client %s:%d %"PRIuPTR" bytes (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
+		debug_log(3, "[%ld] Write to client %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
 			connections[queues[i].conn_index].seq,
 			inet_ntoa(connections[queues[i].conn_index].addr.sin_addr),
 			ntohs(connections[queues[i].conn_index].addr.sin_port),
@@ -557,7 +557,7 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 				ntohs(connections[queues[i].conn_index].addr.sin_port)
 			);
 			connection_zero(i);
-			continue;
+			goto job_release;
 		}
 
 
@@ -588,6 +588,8 @@ static void *teavpn_tcp_worker_thread(struct worker_thread *worker)
 			}
 		}
 
+
+		job_release:
 		queues[i].bufchan->ref_count--;
 
 		pthread_mutex_lock(&worker_job_pull_mutex);
@@ -709,7 +711,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		seq++; // seq 1
 		nread = read(client_fd, &packet, sizeof(packet));
 
-		debug_log(3, "[%"PRIuPTR"] Read auth packet from %s:%d %"PRIuPTR" bytes (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
+		debug_log(3, "[%ld] Read auth packet from %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
 				seq, remote_addr, remote_port, nread, seq, packet.info.seq,
 				(seq == packet.info.seq) ? "match" : "invalid");
 
@@ -727,7 +729,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		}
 
 		if (seq != packet.info.seq) {
-			debug_log(0, "Invalid packet sequence from %s:%d (client_seq: %"PRIuPTR") (server_seq: %"PRIuPTR")",
+			debug_log(0, "Invalid packet sequence from %s:%d (client_seq: %ld) (server_seq: %ld)",
 				remote_addr, remote_port, seq, packet.info.seq);
 			close(client_fd);
 			goto next_cycle;
@@ -810,7 +812,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 
 		nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.sig)));
 
-		debug_log(3, "[%"PRIuPTR"] Write sig auth to %s:%d %"PRIuPTR" bytes (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
+		debug_log(3, "[%ld] Write sig auth to %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
 				seq, remote_addr, remote_port, nwrite, seq, packet.info.seq,
 				(seq == packet.info.seq) ? "match" : "invalid");
 
@@ -836,7 +838,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		seq++; // seq 3
 		nread = read(client_fd, &packet, sizeof(packet));
 
-		debug_log(3, "[%"PRIuPTR"] Read sig ack from %s:%d %"PRIuPTR" bytes (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
+		debug_log(3, "[%ld] Read sig ack from %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
 				seq, remote_addr, remote_port, nread, seq, packet.info.seq,
 				(seq == packet.info.seq) ? "match" : "invalid");
 
@@ -856,7 +858,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		}
 
 		if (seq != packet.info.seq) {
-			debug_log(0, "Invalid packet sequence from %s:%d (client_seq: %"PRIuPTR") (server_seq: %"PRIuPTR") (authenticated)",
+			debug_log(0, "Invalid packet sequence from %s:%d (client_seq: %ld) (server_seq: %ld) (authenticated)",
 				remote_addr, remote_port, seq, packet.info.seq);
 			close(client_fd);
 			connection_zero(conn_index);
@@ -867,9 +869,9 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		 * Verify ack signal..
 		 */
 		if ((packet.info.type == TEAVPN_PACKET_SIG) && (packet.data.sig.sig == TEAVPN_SIG_ACK)) {
-			debug_log(3, "[%"PRIuPTR"] Got ack from %s:%d (connection established)", seq, remote_addr, remote_port);
+			debug_log(3, "[%ld] Got ack from %s:%d (connection established)", seq, remote_addr, remote_port);
 		} else {
-			debug_log(3, "[%"PRIuPTR"] Invalid ack signal from %s:%d (authenticated)", seq, remote_addr, remote_port);
+			debug_log(3, "[%ld] Invalid ack signal from %s:%d (authenticated)", seq, remote_addr, remote_port);
 			debug_log(0, "Dropping connection from %s:%d...", remote_addr, remote_port);
 			close(client_fd);
 			connection_zero(conn_index);
@@ -888,7 +890,7 @@ static void *teavpn_tcp_accept_worker_thread(server_config *config)
 		strcpy(packet.data.conf.inet4_broadcast, &(buffer[sp+1]));
 		nwrite = write(client_fd, &packet, TEAVPN_PACK(sizeof(packet.data.conf)));
 
-		debug_log(3, "[%"PRIuPTR"] Write packet conf to %s:%d %"PRIuPTR" bytes (server_seq: %"PRIuPTR") (client_seq: %"PRIuPTR") (seq %s)",
+		debug_log(3, "[%ld] Write packet conf to %s:%d %ld bytes (server_seq: %ld) (client_seq: %ld) (seq %s)",
 				seq, remote_addr, remote_port, nwrite, seq, packet.info.seq,
 				(seq == packet.info.seq) ? "match" : "invalid");
 
